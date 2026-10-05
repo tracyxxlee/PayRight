@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <title>全聯購物金額統計</title>
+    <link rel="stylesheet" href="styles.css">
+    <!-- Tesseract.js OCR Library -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <h1>🛒 全聯購物金額統計</h1>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Camera Button -->
+            <div class="camera-section">
+                <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display: none;">
+                <button id="cameraBtn" class="btn-camera">
+                    📷 拍照掃描商品售價標籤
+                </button>
+            </div>
+
+            <!-- Shopping List -->
+            <section class="shopping-list-section">
+                <div class="section-header">
+                    <h2>購物清單</h2>
+                    <button id="clearAllBtn" class="btn-clear-all">清空清單</button>
+                </div>
+                
+                <div id="shoppingList" class="shopping-list">
+                    <!-- Empty state -->
+                    <div id="emptyState" class="empty-state">
+                        <p>🛍️</p>
+                        <p>尚無商品，請開始拍照掃描</p>
+                    </div>
+                    
+                    <!-- Products will be dynamically added here -->
+                </div>
+            </section>
+
+            <!-- Total Section -->
+            <section class="total-section">
+                <div class="total-wrapper">
+                    <span class="total-label">總金額</span>
+                    <span id="totalAmount" class="total-amount">$0</span>
+                </div>
+            </section>
+        </main>
+
+        <!-- Photo Preview Modal -->
+        <div id="photoPreviewModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>照片預覽</h3>
+                    <button class="btn-close" id="closePreviewBtn">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <img id="previewImage" src="" alt="商品照片">
+                    <div class="preview-actions">
+                        <button id="retakeBtn" class="btn-secondary">重新拍照</button>
+                        <button id="confirmPhotoBtn" class="btn-primary">確認使用</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- OCR Result Confirmation Modal -->
+        <div id="ocrResultModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>確認商品資訊</h3>
+                    <button class="btn-close" id="closeOcrBtn">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="ocr-photo-preview">
+                        <img id="ocrPhotoPreview" src="" alt="商品照片">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="productName">品名</label>
+                        <input type="text" id="productName" class="form-input" placeholder="請輸入商品名稱" required>
+                    </div>
+                    
+                    <div class="form-group" id="productPriceGroup">
+                        <label for="productPrice">單價 (元)</label>
+                        <input type="number" id="productPrice" class="form-input" placeholder="請輸入價格" step="1" min="0">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="productQuantity">數量</label>
+                        <input type="number" id="productQuantity" class="form-input" value="1" min="1" required>
+                        <div class="validation-error" id="quantityError"></div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="promotionType">特價活動</label>
+                        <select id="promotionType" class="form-select">
+                            <option value="none">無特價</option>
+                            <option value="buy_one_get_one">買一送一</option>
+                            <option value="buy_two_get_one">買二送一</option>
+                            <option value="second_half">第二件半價</option>
+                            <option value="bulk_discount">X個Y元</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group" id="bulkDiscountGroup" style="display: none;">
+                        <label>X個Y元設定</label>
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <input type="number" id="bulkQuantity" class="form-input" placeholder="X (數量)" min="1" step="1" style="flex: 1;">
+                            <span>個</span>
+                            <input type="number" id="bulkPrice" class="form-input" placeholder="Y (價格)" min="1" step="1" style="flex: 1;">
+                            <span>元</span>
+                        </div>
+                        <small class="form-hint">例如: 3個100元</small>
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button id="cancelOcrBtn" class="btn-secondary">取消</button>
+                        <button id="confirmOcrBtn" class="btn-primary">確認加入</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Product Edit Modal -->
+        <div id="editProductModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>編輯商品</h3>
+                    <button class="btn-close" id="closeEditBtn">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="ocr-photo-preview">
+                        <img id="editPhotoPreview" src="" alt="商品照片">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="editProductName">品名</label>
+                        <input type="text" id="editProductName" class="form-input" placeholder="請輸入商品名稱" required>
+                    </div>
+                    
+                    <div class="form-group" id="editProductPriceGroup">
+                        <label for="editProductPrice">單價 (元)</label>
+                        <input type="number" id="editProductPrice" class="form-input" placeholder="請輸入價格" step="0.01" min="0" required>
+                    </div>
+                    
+                    <div class="form-group" id="editBulkDiscountGroup" style="display: none;">
+                        <label>X個Y元設定</label>
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <input type="number" id="editBulkQuantity" class="form-input" placeholder="X (數量)" min="1" step="1" style="flex: 1;">
+                            <span>個</span>
+                            <input type="number" id="editBulkPrice" class="form-input" placeholder="Y (價格)" min="1" step="1" style="flex: 1;">
+                            <span>元</span>
+                        </div>
+                        <small class="form-hint">例如: 3個100元</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="editProductQuantity">數量</label>
+                        <input type="number" id="editProductQuantity" class="form-input" value="1" min="1" required>
+                        <div class="validation-error" id="editQuantityError"></div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="editPromotionType">特價活動</label>
+                        <select id="editPromotionType" class="form-select">
+                            <option value="none">無特價</option>
+                            <option value="buy_one_get_one">買一送一</option>
+                            <option value="buy_two_get_one">買二送一</option>
+                            <option value="second_half">第二件半價</option>
+                            <option value="bulk_discount">X個Y元</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="editCustomSubtotal">自訂小計 (元) - 選填</label>
+                        <input type="number" id="editCustomSubtotal" class="form-input" placeholder="留空則自動計算" step="0.01" min="0">
+                        <small class="form-hint">適用於非內建特價規則，如買三送一</small>
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button id="cancelEditBtn" class="btn-secondary">取消</button>
+                        <button id="confirmEditBtn" class="btn-primary">儲存變更</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Loading Overlay -->
+        <div id="loadingOverlay" class="loading-overlay">
+            <div class="loading-spinner"></div>
+            <p id="loadingText">處理中...</p>
+        </div>
+
+        <!-- Toast Notification -->
+        <div id="toast" class="toast"></div>
+    </div>
+
+    <script src="ocr-service.js"></script>
+    <script src="product-manager.js"></script>
+    <script src="price-calculator.js"></script>
+    <script src="storage-manager.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
