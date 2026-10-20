@@ -11,7 +11,8 @@ class PriceCalculator {
             BUY_ONE_GET_ONE: 'buy_one_get_one',
             BUY_TWO_GET_ONE: 'buy_two_get_one',
             SECOND_HALF: 'second_half',
-            BULK_DISCOUNT: 'bulk_discount'
+            BULK_DISCOUNT: 'bulk_discount',
+            CUSTOM_SUBTOTAL: 'custom_subtotal'
         };
 
         // 特價類型名稱對照
@@ -20,7 +21,8 @@ class PriceCalculator {
             'buy_one_get_one': '買一送一',
             'buy_two_get_one': '買二送一',
             'second_half': '第二件半價',
-            'bulk_discount': 'X個Y元'
+            'bulk_discount': 'X個Y元',
+            'custom_subtotal': '自訂小計金額'
         };
 
         console.log('💰 PriceCalculator 初始化');
@@ -33,7 +35,8 @@ class PriceCalculator {
      */
     calculateSubtotal(product) {
         // 如果有自訂小計，直接使用
-        if (product.customSubtotal !== null && product.customSubtotal !== undefined) {
+        if (product.promotion === this.PROMOTION_TYPES.CUSTOM_SUBTOTAL
+            && product.customSubtotal !== null && product.customSubtotal !== undefined) {
             console.log(`💵 使用自訂小計: ${product.customSubtotal} 元`);
             return product.customSubtotal;
         }
@@ -89,23 +92,18 @@ class PriceCalculator {
     }
 
     /**
-     * 買二送一：Math.ceil(數量 / 3) × 2 × 單價
-     * 範例：
-     * - 1件 → 付1件 = 1 × 價格
-     * - 2件 → 付2件 = 2 × 價格
-     * - 3件 → 付2件 = 2 × 價格
-     * - 4件 → 付3件 = 3 × 價格
-     * - 5件 → 付4件 = 4 × 價格
-     * - 6件 → 付4件 = 4 × 價格
+     * 買二送一：每滿 3 件付 2 件，剩下的件數照單價付。
+     * 1 件付 1 件、2 件付 2 件、4 件付 3 件。
      */
     calculateBuyTwoGetOne(price, quantity) {
-        const groups = Math.ceil(quantity / 3);
-        const payFor = Math.min(groups * 2, quantity); // 不會超過實際數量
+        const fullGroups = Math.floor(quantity / 3);
+        const remainder = quantity % 3;
+        const payFor = fullGroups * 2 + remainder;
         return price * payFor;
     }
 
     /**
-     * 第二件半價（0.5折）
+     * 第二件半價：第二件為原價的 50%
      * 範例：
      * - 1件 → 1 × 價格
      * - 2件 → 1 × 價格 + 0.5 × 價格 = 1.5 × 價格
@@ -120,7 +118,7 @@ class PriceCalculator {
      * 第二件折扣（通用）
      * @param {number} price - 單價
      * @param {number} quantity - 數量
-     * @param {number} discount - 第二件折扣（0.5 = 半價）
+     * @param {number} discount - 第二件相對原價的比例（0.5 = 原價的 50%）
      */
     calculateSecondDiscount(price, quantity, discount) {
         const pairs = Math.floor(quantity / 2); // 完整的配對數
@@ -185,16 +183,6 @@ class PriceCalculator {
     }
 
     /**
-     * 取得所有特價類型
-     */
-    getAllPromotionTypes() {
-        return Object.keys(this.PROMOTION_NAMES).map(key => ({
-            value: key,
-            label: this.PROMOTION_NAMES[key]
-        }));
-    }
-
-    /**
      * 計算節省金額
      * @param {Object} product - 商品物件
      * @returns {number} 節省的金額
@@ -232,33 +220,6 @@ class PriceCalculator {
             discountRate: hasDiscount && normalPrice > 0 ? ((1 - subtotal / normalPrice) * 100).toFixed(1) : 0,
             promotionName: this.getPromotionName(product.promotion)
         };
-    }
-
-    /**
-     * Debug: 測試所有特價計算
-     */
-    debugTest() {
-        console.log('🧪 測試特價計算功能');
-        
-        const testCases = [
-            { name: '無特價', price: 100, quantity: 3, promotion: 'none' },
-            { name: '買一送一', price: 100, quantity: 4, promotion: 'buy_one_get_one' },
-            { name: '買二送一', price: 90, quantity: 6, promotion: 'buy_two_get_one' },
-            { name: '第二件半價', price: 100, quantity: 5, promotion: 'second_half' },
-            { name: 'X個Y元', price: 50, quantity: 7, promotion: 'bulk_discount', bulkQuantity: 3, bulkPrice: 100 }
-        ];
-
-        testCases.forEach(test => {
-            const product = {
-                ...test,
-                customSubtotal: null
-            };
-            const subtotal = this.calculateSubtotal(product);
-            const info = this.getPriceInfo(product);
-            console.log(`${test.name} (${test.quantity}件 × $${test.price}): $${subtotal} (省 $${info.savings})`);
-        });
-
-        console.log('✅ 測試完成');
     }
 }
 

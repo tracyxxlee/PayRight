@@ -1,0 +1,23 @@
+{
+  "name": "mobile-shopping-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "別多付-購物金額統計幫手 — HTML/JS 網頁，以 Capacitor 包成 Android App",
+  "scripts": {
+    "copy:web": "node scripts/copy-web.mjs",
+    "serve": "node scripts/dev-server.mjs",
+    "cap:sync": "npm run copy:web && npx cap sync android",
+    "android:open": "npm run cap:sync && npx cap open android",
+    "android:debug": "npm run cap:sync && cd android && gradlew.bat assembleDebug"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^7.4.3",
+    "@capacitor/cli": "^7.4.3",
+    "@capacitor/core": "^7.4.3"
+  },
+  "dependencies": {
+    "@capacitor/camera": "^7.0.5",
+    "@tesseract.js-data/chi_tra": "^1.0.0",
+    "tesseract.js": "^5.1.1"
+  }
+}

@@ -7,7 +7,27 @@ class OCRService {
     constructor() {
         this.worker = null;
         this.isInitialized = false;
+        this.timeoutMs = 45000;
+        this.generation = 0;
+        this._triggerCancelRecognize = null;
         console.log('🔧 OCRService 初始化');
+    }
+
+    _createCancelledError() {
+        const error = new Error('辨識已取消');
+        error.code = 'OCR_CANCELLED';
+        return error;
+    }
+
+    /**
+     * 使用者取消進行中的辨識（終止 Worker 並 reject 目前的 recognize）
+     */
+    cancel() {
+        if (this._triggerCancelRecognize) {
+            this._triggerCancelRecognize();
+            return;
+        }
+        this.discardWorker();
     }
 
     /**
@@ -19,151 +39,183 @@ class OCRService {
             return;
         }
 
+        const generation = this.generation;
+
         try {
-            console.log('⏳ 正在初始化 Tesseract.js...');
-            
-            // 直接使用簡化版本，不傳入 logger（避免 DataCloneError）
-            this.worker = await Tesseract.createWorker('chi_tra+eng');
-            
+            console.log('⏳ 正在初始化 Tesseract.js（本地語料）...');
+
+            if (typeof Tesseract === 'undefined') {
+                throw new Error('找不到本地 OCR 引擎，請先執行 npm run copy:web');
+            }
+
+            const assetUrl = (relativePath) => new URL(relativePath, window.location.href).href;
+
+            // 引擎、worker、繁中語料（4.0.0 完整模型）在 vendor/tesseract，不連 jsDelivr
+            const worker = await Tesseract.createWorker('chi_tra', 1, {
+                workerPath: assetUrl('vendor/tesseract/worker.min.js'),
+                corePath: assetUrl('vendor/tesseract/core'),
+                langPath: assetUrl('vendor/tesseract/lang'),
+                workerBlobURL: false,
+                gzip: true,
+            });
+
+            if (generation !== this.generation) {
+                Promise.resolve(worker.terminate()).catch(() => {});
+                throw new Error('辨識已取消');
+            }
+
+            this.worker = worker;
+
             // Set parameters for better recognition
             await this.worker.setParameters({
                 tessedit_pageseg_mode: Tesseract.PSM.AUTO,
                 preserve_interword_spaces: '1',
             });
 
+            if (generation !== this.generation) {
+                this.discardWorker();
+                throw new Error('辨識已取消');
+            }
+
             this.isInitialized = true;
             console.log('✅ Tesseract.js 初始化完成');
-            
+
         } catch (error) {
+            if (error && error.message === '辨識已取消') {
+                throw error;
+            }
             console.error('❌ Tesseract.js 初始化失敗:', error);
             throw new Error('OCR 引擎初始化失敗');
         }
     }
 
     /**
-     * 預處理圖片以提高辨識率
-     * 使用較溫和的處理方式保留更多細節
+     * 逾時後放掉這次的 worker，避免下一張照片卡在同一個辨識上。
      */
-    preprocessImage(base64Image) {
-        return new Promise((resolve) => {
-            const img = new Image();
-            
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                const ctx = canvas.getContext('2d');
-                
-                // Scale up small images for better recognition
-                let width = img.width;
-                let height = img.height;
-                const minWidth = 1200;
-                
-                if (width < minWidth) {
-                    const scale = minWidth / width;
-                    width = minWidth;
-                    height = height * scale;
-                }
-                
-                canvas.width = width;
-                canvas.height = height;
-                
-                // Draw original image
-                ctx.drawImage(img, 0, 0, width, height);
-                
-                // Get image data
-                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                const data = imageData.data;
-                
-                // Convert to grayscale with gentle contrast enhancement
-                for (let i = 0; i < data.length; i += 4) {
-                    // Grayscale conversion
-                    const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
-                    
-                    // Gentle contrast enhancement (not binary threshold)
-                    let enhanced = gray;
-                    if (gray < 127) {
-                        enhanced = gray * 0.7; // Darken dark pixels
-                    } else {
-                        enhanced = 127 + (gray - 127) * 1.3; // Brighten bright pixels
-                        enhanced = Math.min(255, enhanced);
-                    }
-                    
-                    data[i] = enhanced;     // R
-                    data[i + 1] = enhanced; // G
-                    data[i + 2] = enhanced; // B
-                }
-                
-                // Put processed image back
-                ctx.putImageData(imageData, 0, 0);
-                
-                const processed = canvas.toDataURL('image/jpeg', 0.95);
-                console.log('🎨 圖片預處理完成 (尺寸:', width, 'x', height, ')');
-                resolve(processed);
-            };
-            
-            img.onerror = () => {
-                console.warn('⚠️ 圖片預處理失敗，使用原圖');
-                resolve(base64Image);
-            };
-            
-            img.src = base64Image;
-        });
+    discardWorker() {
+        const worker = this.worker;
+        this.generation += 1;
+        this.worker = null;
+        this.isInitialized = false;
+        if (worker) {
+            Promise.resolve(worker.terminate()).catch((err) => {
+                console.warn('停止辨識失敗', err);
+            });
+        }
     }
 
     /**
-     * 執行 OCR 辨識
+     * 執行 OCR 辨識。超過 timeoutMs 視為失敗。
      */
-    async recognize(base64Image, onProgress = null) {
-        if (!this.isInitialized) {
-            await this.initialize();
-        }
+    async recognize(base64Image) {
+        const job = this.recognizeImage(base64Image);
+        job.catch(() => {});
+
+        let timer;
+        const timeout = new Promise((_, reject) => {
+            timer = setTimeout(() => {
+                const error = new Error('辨識失敗');
+                error.code = 'OCR_TIMEOUT';
+                reject(error);
+            }, this.timeoutMs);
+        });
+
+        const cancel = new Promise((_, reject) => {
+            this._triggerCancelRecognize = () => {
+                this.discardWorker();
+                reject(this._createCancelledError());
+            };
+        });
 
         try {
-            console.log('🔍 開始 OCR 辨識...');
-            
-            // Try with preprocessed image first
-            console.log('🎨 嘗試使用預處理圖片...');
-            const preprocessed = await this.preprocessImage(base64Image);
-            
-            // Perform OCR
-            const { data } = await this.worker.recognize(preprocessed);
-            
+            return await Promise.race([job, timeout, cancel]);
+        } catch (error) {
+            if (error && error.code === 'OCR_TIMEOUT') {
+                console.warn(`辨識超過 ${this.timeoutMs} 毫秒`);
+                this.discardWorker();
+            }
+            if (error && error.code === 'OCR_CANCELLED') {
+                console.log('使用者取消 OCR 辨識');
+            }
+            throw error;
+        } finally {
+            clearTimeout(timer);
+            this._triggerCancelRecognize = null;
+        }
+    }
+
+    async recognizeImage(base64Image) {
+        const jobGeneration = this.generation;
+
+        const assertNotCancelled = () => {
+            if (jobGeneration !== this.generation) {
+                throw this._createCancelledError();
+            }
+        };
+
+        if (!this.isInitialized) {
+            try {
+                await this.initialize();
+            } catch (error) {
+                if (error && error.message === '辨識已取消') {
+                    throw this._createCancelledError();
+                }
+                throw error;
+            }
+        }
+        assertNotCancelled();
+
+        try {
+            console.log('🔍 開始 OCR 辨識（原圖，單次）...');
+
+            const { data } = await this.worker.recognize(base64Image);
+            assertNotCancelled();
+
+            const confidence = this.computeRecognitionConfidence(data);
+
             console.log('✅ OCR 辨識完成');
             console.log('📝 辨識文字:', data.text);
-            console.log('📊 信心度:', (data.confidence || 0).toFixed(2) + '%');
-            
-            // If confidence is too low, try with original image
-            if (data.confidence < 50) {
-                console.log('⚠️ 信心度較低，嘗試使用原始圖片重新辨識...');
-                try {
-                    const { data: data2 } = await this.worker.recognize(base64Image);
-                    if (data2.confidence > data.confidence) {
-                        console.log('✅ 原始圖片辨識效果更好，使用新結果');
-                        console.log('📝 辨識文字:', data2.text);
-                        console.log('📊 信心度:', (data2.confidence || 0).toFixed(2) + '%');
-                        return {
-                            text: data2.text,
-                            confidence: data2.confidence || 0,
-                            words: data2.words || [],
-                            lines: data2.lines || []
-                        };
-                    }
-                } catch (err) {
-                    console.warn('⚠️ 原始圖片辨識失敗，使用預處理結果');
-                }
-            }
-            
+            console.log('📊 信心度:', confidence.toFixed(2) + '%');
+
             return {
                 text: data.text,
-                confidence: data.confidence || 0,
-                words: data.words || [],
-                lines: data.lines || []
+                confidence
             };
-            
+
         } catch (error) {
+            if (error && error.code === 'OCR_CANCELLED') {
+                throw error;
+            }
+            if (jobGeneration !== this.generation) {
+                throw this._createCancelledError();
+            }
             console.error('❌ OCR 辨識失敗:', error);
             console.error('錯誤詳情:', error.message);
             throw new Error('文字辨識失敗: ' + error.message);
         }
+    }
+
+    /**
+     * 依實際辨識到的字詞計算信心度。Tesseract 的 data.confidence 在無文字時仍可能偏高，不可直接採用。
+     */
+    computeRecognitionConfidence(data) {
+        const text = (data.text || '').trim();
+        if (!text) {
+            return 0;
+        }
+
+        const words = Array.isArray(data.words) ? data.words : [];
+        const scored = words.filter((w) => w.text && String(w.text).trim());
+        if (scored.length > 0) {
+            const total = scored.reduce((sum, w) => sum + (Number(w.confidence) || 0), 0);
+            return total / scored.length;
+        }
+
+        const page = Number(data.confidence);
+        if (Number.isFinite(page) && page >= 0) {
+            return page;
+        }
+        return 0;
     }
 
     /**
@@ -174,11 +226,13 @@ class OCRService {
         console.log('🔎 解析商品資訊...');
         console.log('原始文字:', text);
 
+        const textTrimmed = (text || '').trim();
+
         // Extract product name and price
         const parsed = {
             name: '',
             price: null,
-            confidence: ocrResult.confidence
+            confidence: textTrimmed ? (ocrResult.confidence ?? 0) : 0
         };
 
         // Try to extract price (various formats)
@@ -261,18 +315,6 @@ class OCRService {
 
         console.log('✅ 解析結果:', parsed);
         return parsed;
-    }
-
-    /**
-     * 終止 Worker
-     */
-    async terminate() {
-        if (this.worker) {
-            await this.worker.terminate();
-            this.worker = null;
-            this.isInitialized = false;
-            console.log('🛑 OCR Worker 已終止');
-        }
     }
 }
 
