@@ -1,8 +1,10 @@
 // ===== Global State =====
 let currentPhoto = null; // Store current photo as base64
-let currentPhotoFile = null; // Store the file object for processing
 
-console.log('🛒 全聯購物金額統計 App 已啟動');
+// 滿 30 筆只警告，不阻擋。之後可做成設定，讓使用者依手機能力調整。
+const LIST_SIZE_WARNING = 30;
+
+console.log('🛒 別多付 App 已啟動');
 console.log('版本: 1.0.0');
 console.log('開發階段: ✅ 所有功能開發完成！');
 
@@ -21,36 +23,44 @@ const editProductModal = document.getElementById('editProductModal');
 const loadingOverlay = document.getElementById('loadingOverlay');
 const toast = document.getElementById('toast');
 
+// 點進欄位時全選內容，方便直接覆寫
+document.addEventListener('focusin', (e) => {
+    const input = e.target;
+    if (!(input instanceof HTMLInputElement) || !input.classList.contains('form-input')) {
+        return;
+    }
+    input.select();
+});
+
 // ===== Event Listeners (Placeholder) =====
 cameraBtn.addEventListener('click', () => {
     console.log('📷 拍照按鈕被點擊');
-    cameraInput.click();
+    openCamera();
 });
 
 cameraInput.addEventListener('change', async (e) => {
     const file = e.target.files[0];
-    
+
     if (!file) {
         console.log('❌ 沒有選擇照片');
         return;
     }
-    
+
     console.log('📸 照片已選擇:', file.name, `(${(file.size / 1024).toFixed(2)} KB)`);
-    
+
     try {
         // Convert image to base64
         const base64 = await fileToBase64(file);
         currentPhoto = base64;
-        currentPhotoFile = file;
-        
+
         // Show photo preview
         showPhotoPreview(base64);
-        
+
     } catch (error) {
         console.error('❌ 照片處理失敗:', error);
         showToast('照片處理失敗，請重試', 'error');
     }
-    
+
     // Reset input so same file can be selected again
     e.target.value = '';
 });
@@ -65,73 +75,77 @@ document.getElementById('cancelOcrBtn').addEventListener('click', () => {
     console.log('❌ 取消加入商品');
     hideModal(ocrResultModal);
     currentPhoto = null;
-    currentPhotoFile = null;
 });
 
-document.getElementById('confirmOcrBtn').addEventListener('click', () => {
+document.getElementById('confirmOcrBtn').addEventListener('click', async () => {
     console.log('✅ 確認加入商品');
-    
+
     // Get form values
     const name = document.getElementById('productName').value.trim();
     const promotion = document.getElementById('promotionType').value;
-    const quantity = parseInt(document.getElementById('productQuantity').value);
-    
-    let price, bulkQuantity, bulkPrice;
-    
+    const quantity = readPositiveInteger(document.getElementById('productQuantity').value);
+
+    let price, bulkQuantity, bulkPrice, customSubtotal;
+
     if (promotion === 'bulk_discount') {
         // Get bulk discount values
         bulkQuantity = parseInt(document.getElementById('bulkQuantity').value);
         bulkPrice = parseFloat(document.getElementById('bulkPrice').value);
         price = 0; // Not used for bulk discount
+        customSubtotal = null;
+    } else if (promotion === 'custom_subtotal') {
+        price = parseFloat(document.getElementById('productPrice').value);
+        bulkQuantity = null;
+        bulkPrice = null;
+        const customSubtotalInput = document.getElementById('productCustomSubtotal').value.trim();
+        customSubtotal = customSubtotalInput === '' ? null : parseFloat(customSubtotalInput);
     } else {
         // Get regular price
         price = parseFloat(document.getElementById('productPrice').value);
         bulkQuantity = null;
         bulkPrice = null;
+        customSubtotal = null;
     }
-    
+
     // Validate form
-    if (!validateProductForm(name, price, quantity, promotion, bulkQuantity, bulkPrice)) {
+    if (!validateProductForm(name, price, quantity, promotion, bulkQuantity, bulkPrice, customSubtotal)) {
         return;
     }
-    
-    // Create product object
+
+    // 流水號由 ProductManager 指定，這裡不帶 id
+    let photo = null;
+    if (currentPhoto) {
+        try {
+            photo = await createStoredThumbnail(currentPhoto);
+        } catch (error) {
+            console.error('縮圖失敗:', error);
+            showToast('照片無法儲存，商品仍會加入', 'warning');
+        }
+    }
+
     const product = {
-        id: generateId(),
         name: name,
         price: price,
         quantity: quantity,
         promotion: promotion,
         bulkQuantity: bulkQuantity,
         bulkPrice: bulkPrice,
-        customSubtotal: null,
-        photo: currentPhoto,
-        timestamp: Date.now()
+        customSubtotal: customSubtotal,
+        photo: photo
     };
-    
+
     console.log('📦 新商品:', product);
-    
-    // Hide modal
+
     hideModal(ocrResultModal);
-    
-    // Add product to shopping list
-    const addedProduct = productManager.addProduct(product);
-    console.log('✅ 商品已加入購物清單');
-    
-    // Save to localStorage
-    storageManager.saveProducts(productManager.getAllProducts());
-    storageManager.savePhoto(addedProduct.id, addedProduct.photo);
-    
-    // Reset photo state
+
+    const addResult = productManager.addProduct(product);
+    console.log('✅ 商品已加入購物清單', addResult.product.serial);
+
     currentPhoto = null;
-    currentPhotoFile = null;
-    
-    // Update UI
     renderShoppingList();
-    
-    // Show success message
-    if (addedProduct.quantity > product.quantity) {
-        showToast(`已合併商品「${addedProduct.name}」，數量: ${addedProduct.quantity}`, 'success');
+    const count = productManager.getProductCount();
+    if (count >= LIST_SIZE_WARNING) {
+        showToast(`購物清單已有 ${count} 筆，仍可繼續加入`, 'warning');
     } else {
         showToast('商品已加入購物清單！', 'success');
     }
@@ -155,10 +169,11 @@ document.getElementById('productPrice').addEventListener('input', (e) => {
     }
 });
 
+document.getElementById('productQuantity').addEventListener('keydown', blockNonIntegerKeys);
 document.getElementById('productQuantity').addEventListener('input', (e) => {
     const input = e.target;
-    const value = parseInt(input.value);
-    if (!isNaN(value) && value > 0 && Number.isInteger(value)) {
+    sanitizePositiveIntegerField(input);
+    if (readPositiveInteger(input.value)) {
         input.style.borderColor = '';
     } else {
         input.style.borderColor = 'var(--danger-color)';
@@ -167,7 +182,7 @@ document.getElementById('productQuantity').addEventListener('input', (e) => {
 });
 
 // Enter key support for OCR modal
-['productName', 'productPrice', 'productQuantity'].forEach(fieldId => {
+['productName', 'productPrice', 'productQuantity', 'productCustomSubtotal'].forEach(fieldId => {
     document.getElementById(fieldId).addEventListener('keypress', (e) => {
         if (e.key === 'Enter') {
             e.preventDefault();
@@ -179,20 +194,16 @@ document.getElementById('productQuantity').addEventListener('input', (e) => {
 // OCR modal promotion type change handler
 document.getElementById('promotionType').addEventListener('change', (e) => {
     const promotionType = e.target.value;
-    const productPriceGroup = document.getElementById('productPriceGroup');
-    const bulkDiscountGroup = document.getElementById('bulkDiscountGroup');
-    
+    setOcrPromotionFields(promotionType);
+
     if (promotionType === 'bulk_discount') {
-        productPriceGroup.style.display = 'none';
-        bulkDiscountGroup.style.display = 'block';
-        // Clear price field when switching to bulk discount
         document.getElementById('productPrice').value = '';
     } else {
-        productPriceGroup.style.display = 'block';
-        bulkDiscountGroup.style.display = 'none';
-        // Clear bulk discount fields when switching away
         document.getElementById('bulkQuantity').value = '';
         document.getElementById('bulkPrice').value = '';
+    }
+    if (promotionType !== 'custom_subtotal') {
+        document.getElementById('productCustomSubtotal').value = '';
     }
     updateQuantityMultipleFeedback('productQuantity', 'quantityError', 'promotionType', 'bulkQuantity');
 });
@@ -225,10 +236,11 @@ document.getElementById('editProductPrice').addEventListener('input', (e) => {
     }
 });
 
+document.getElementById('editProductQuantity').addEventListener('keydown', blockNonIntegerKeys);
 document.getElementById('editProductQuantity').addEventListener('input', (e) => {
     const input = e.target;
-    const value = parseInt(input.value);
-    if (!isNaN(value) && value > 0 && Number.isInteger(value)) {
+    sanitizePositiveIntegerField(input);
+    if (readPositiveInteger(input.value)) {
         input.style.borderColor = '';
     } else {
         input.style.borderColor = 'var(--danger-color)';
@@ -307,20 +319,16 @@ document.getElementById('editBulkPrice').addEventListener('input', (e) => {
 // Edit modal promotion type change handler
 document.getElementById('editPromotionType').addEventListener('change', (e) => {
     const promotionType = e.target.value;
-    const editProductPriceGroup = document.getElementById('editProductPriceGroup');
-    const editBulkDiscountGroup = document.getElementById('editBulkDiscountGroup');
-    
+    setEditPromotionFields(promotionType);
+
     if (promotionType === 'bulk_discount') {
-        editProductPriceGroup.style.display = 'none';
-        editBulkDiscountGroup.style.display = 'block';
-        // Clear price field when switching to bulk discount
         document.getElementById('editProductPrice').value = '';
     } else {
-        editProductPriceGroup.style.display = 'block';
-        editBulkDiscountGroup.style.display = 'none';
-        // Clear bulk discount fields when switching away
         document.getElementById('editBulkQuantity').value = '';
         document.getElementById('editBulkPrice').value = '';
+    }
+    if (promotionType !== 'custom_subtotal') {
+        document.getElementById('editCustomSubtotal').value = '';
     }
     updateQuantityMultipleFeedback('editProductQuantity', 'editQuantityError', 'editPromotionType', 'editBulkQuantity');
 });
@@ -337,21 +345,63 @@ document.getElementById('editPromotionType').addEventListener('change', (e) => {
 
 // ===== Camera & Photo Functions =====
 
+function isNativeApp() {
+    return Boolean(window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform());
+}
+
+/**
+ * Android WebView ignores capture="environment" and opens the gallery.
+ * Inside the app, call the system camera. In a browser, keep the file input.
+ */
+async function openCamera() {
+    if (!isNativeApp()) {
+        cameraInput.click();
+        return;
+    }
+
+    try {
+        const photo = await window.Capacitor.nativePromise('Camera', 'getPhoto', {
+            quality: 100,
+            allowEditing: false,
+            resultType: 'dataUrl',
+            source: 'CAMERA',
+            correctOrientation: true,
+            saveToGallery: false,
+        });
+
+        if (!photo || !photo.dataUrl) {
+            showToast('沒有取得照片，請重試', 'error');
+            return;
+        }
+
+        currentPhoto = photo.dataUrl;
+        showPhotoPreview(currentPhoto);
+    } catch (error) {
+        const message = String(error && error.message ? error.message : error || '');
+        if (/cancel/i.test(message)) {
+            console.log('使用者取消拍照');
+            return;
+        }
+        console.error('❌ 無法開啟相機:', error);
+        showToast('無法開啟相機，請允許相機權限後重試', 'error');
+    }
+}
+
 /**
  * Convert file to base64
  */
 function fileToBase64(file) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
-        
+
         reader.onload = () => {
             resolve(reader.result);
         };
-        
+
         reader.onerror = (error) => {
             reject(error);
         };
-        
+
         reader.readAsDataURL(file);
     });
 }
@@ -370,13 +420,13 @@ function showPhotoPreview(base64Image) {
  * Compress image if too large
  */
 async function compressImage(base64Image, maxSizeKB = 500) {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
         const img = new Image();
         img.onload = () => {
             const canvas = document.createElement('canvas');
             let width = img.width;
             let height = img.height;
-            
+
             // Calculate new dimensions if image is too large
             const maxDimension = 1920;
             if (width > maxDimension || height > maxDimension) {
@@ -388,27 +438,103 @@ async function compressImage(base64Image, maxSizeKB = 500) {
                     height = maxDimension;
                 }
             }
-            
+
             canvas.width = width;
             canvas.height = height;
-            
+
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0, width, height);
-            
+
             // Try different quality levels to meet size requirement
             let quality = 0.9;
             let compressed = canvas.toDataURL('image/jpeg', quality);
-            
+
             // Check size and reduce quality if needed
             while (compressed.length > maxSizeKB * 1024 && quality > 0.1) {
                 quality -= 0.1;
                 compressed = canvas.toDataURL('image/jpeg', quality);
             }
-            
+
             console.log(`🗜️ 圖片壓縮: ${(base64Image.length / 1024).toFixed(2)} KB → ${(compressed.length / 1024).toFixed(2)} KB`);
             resolve(compressed);
         };
-        
+
+        img.onerror = () => {
+            reject(new Error('圖片無法讀取'));
+        };
+
+        img.src = base64Image;
+    });
+}
+
+const THUMB_MIN_BYTES = 80 * 1024;
+const THUMB_MAX_BYTES = 150 * 1024;
+
+function dataUrlByteSize(dataUrl) {
+    const base64 = String(dataUrl).split(',')[1] || '';
+    const padding = base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0;
+    return Math.floor((base64.length * 3) / 4) - padding;
+}
+
+function renderJpeg(img, maxEdge, quality) {
+    let width = img.width;
+    let height = img.height;
+    const longest = Math.max(width, height);
+    if (longest > maxEdge) {
+        const scale = maxEdge / longest;
+        width = Math.max(1, Math.round(width * scale));
+        height = Math.max(1, Math.round(height * scale));
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+    return canvas.toDataURL('image/jpeg', quality);
+}
+
+/**
+ * 清單裡只留縮圖，單張盡量落在 80–150KB。
+ * 原圖太小而達不到 80KB 時，保留較清楚的那張，不放大。
+ */
+function createStoredThumbnail(base64Image) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+            let maxEdge = 1280;
+            let smallest = null;
+
+            while (maxEdge >= 240) {
+                let quality = 0.92;
+                let encoded = renderJpeg(img, maxEdge, quality);
+                let size = dataUrlByteSize(encoded);
+
+                while (size > THUMB_MAX_BYTES && quality > 0.4) {
+                    quality = Math.round((quality - 0.06) * 100) / 100;
+                    encoded = renderJpeg(img, maxEdge, quality);
+                    size = dataUrlByteSize(encoded);
+                }
+
+                if (size <= THUMB_MAX_BYTES) {
+                    if (size >= THUMB_MIN_BYTES || smallest === null) {
+                        smallest = encoded;
+                    }
+                    if (size >= THUMB_MIN_BYTES) {
+                        console.log(`縮圖 ${(size / 1024).toFixed(1)} KB`);
+                        resolve(encoded);
+                        return;
+                    }
+                    break;
+                }
+
+                maxEdge = Math.round(maxEdge * 0.75);
+            }
+
+            const result = smallest || renderJpeg(img, 240, 0.4);
+            console.log(`縮圖 ${(dataUrlByteSize(result) / 1024).toFixed(1)} KB`);
+            resolve(result);
+        };
+        img.onerror = () => reject(new Error('圖片無法讀取'));
         img.src = base64Image;
     });
 }
@@ -419,28 +545,55 @@ async function compressImage(base64Image, maxSizeKB = 500) {
 function showOcrResultModal(productInfo, photoBase64) {
     // Set photo
     document.getElementById('ocrPhotoPreview').src = photoBase64;
-    
+
     // Set product info (pre-fill with OCR results)
     document.getElementById('productName').value = productInfo.name || '';
     document.getElementById('productPrice').value = productInfo.price || '';
     document.getElementById('productQuantity').value = 1;
     document.getElementById('promotionType').value = 'none';
-    document.getElementById('productPriceGroup').style.display = 'block';
-    document.getElementById('bulkDiscountGroup').style.display = 'none';
+    setOcrPromotionFields('none');
     document.getElementById('bulkQuantity').value = '';
     document.getElementById('bulkPrice').value = '';
+    document.getElementById('productCustomSubtotal').value = '';
     clearQuantityError('quantityError', 'productQuantity');
-    
+
     // Show modal
     showModal(ocrResultModal);
-    
-    // Show confidence if available
-    if (productInfo.confidence) {
-        console.log(`📊 OCR 信心度: ${productInfo.confidence.toFixed(2)}%`);
-        if (productInfo.confidence < 60) {
+
+    const confidence = Number(productInfo.confidence);
+    if (Number.isFinite(confidence) && confidence > 0) {
+        console.log(`📊 OCR 信心度: ${confidence.toFixed(2)}%`);
+        if (confidence < 60) {
             showToast('辨識準確度較低，請確認資訊', 'warning');
         }
+    } else if (!productInfo.name && productInfo.price == null) {
+        showToast('未辨識到文字，請手動輸入', 'warning');
     }
+}
+
+function blockNonIntegerKeys(event) {
+    if (['.', ',', 'e', 'E', '+', '-'].includes(event.key)) {
+        event.preventDefault();
+    }
+}
+
+function sanitizePositiveIntegerField(input) {
+    const raw = input.value;
+    if (raw === '') {
+        return;
+    }
+    const digits = raw.split(/[.,eE+]/)[0].replace(/\D/g, '').replace(/^0+/, '');
+    if (digits !== raw) {
+        input.value = digits;
+    }
+}
+
+function readPositiveInteger(raw) {
+    const text = String(raw).trim();
+    if (!/^[1-9]\d*$/.test(text)) {
+        return NaN;
+    }
+    return Number(text);
 }
 
 /**
@@ -468,8 +621,8 @@ function clearQuantityError(errorElementId, inputElementId) {
     errorEl.textContent = '';
     errorEl.style.display = 'none';
     const inputElement = document.getElementById(inputElementId);
-    const value = parseInt(inputElement.value, 10);
-    if (!isNaN(value) && value > 0 && Number.isInteger(value)) {
+    const value = readPositiveInteger(inputElement.value);
+    if (value) {
         inputElement.style.borderColor = '';
     }
 }
@@ -481,8 +634,8 @@ function updateQuantityMultipleFeedback(quantityInputId, errorId, promotionSelec
         clearQuantityError(errorId, quantityInputId);
         return null;
     }
-    const quantity = parseInt(quantityInput.value, 10);
-    const bulkQuantity = parseInt(document.getElementById(bulkQuantityInputId).value, 10);
+    const quantity = readPositiveInteger(quantityInput.value);
+    const bulkQuantity = readPositiveInteger(document.getElementById(bulkQuantityInputId).value);
     const message = validateBulkQuantity(quantity, bulkQuantity);
     if (message) {
         showQuantityError(errorId, quantityInput, message);
@@ -492,24 +645,40 @@ function updateQuantityMultipleFeedback(quantityInputId, errorId, promotionSelec
     return message;
 }
 
+function setEditPromotionFields(promotionType) {
+    const isBulk = promotionType === 'bulk_discount';
+    const isCustom = promotionType === 'custom_subtotal';
+    document.getElementById('editProductPriceGroup').style.display = isBulk ? 'none' : 'block';
+    document.getElementById('editBulkDiscountGroup').style.display = isBulk ? 'block' : 'none';
+    document.getElementById('editCustomSubtotalGroup').style.display = isCustom ? 'block' : 'none';
+}
+
+function setOcrPromotionFields(promotionType) {
+    const isBulk = promotionType === 'bulk_discount';
+    const isCustom = promotionType === 'custom_subtotal';
+    document.getElementById('productPriceGroup').style.display = isBulk ? 'none' : 'block';
+    document.getElementById('bulkDiscountGroup').style.display = isBulk ? 'block' : 'none';
+    document.getElementById('customSubtotalGroup').style.display = isCustom ? 'block' : 'none';
+}
+
 /**
  * Validate product form
  */
-function validateProductForm(name, price, quantity, promotion, bulkQuantity, bulkPrice) {
+function validateProductForm(name, price, quantity, promotion, bulkQuantity, bulkPrice, customSubtotal) {
     // Validate name
     if (!name || name.length === 0) {
         showToast('請輸入商品名稱', 'error');
         document.getElementById('productName').focus();
         return false;
     }
-    
+
     // Validate quantity
     if (isNaN(quantity) || quantity <= 0 || !Number.isInteger(quantity)) {
         showToast('請輸入有效的數量（正整數）', 'error');
         document.getElementById('productQuantity').focus();
         return false;
     }
-    
+
     if (promotion === 'bulk_discount') {
         // Validate bulk discount fields
         if (isNaN(bulkQuantity) || bulkQuantity <= 0 || !Number.isInteger(bulkQuantity)) {
@@ -517,7 +686,7 @@ function validateProductForm(name, price, quantity, promotion, bulkQuantity, bul
             document.getElementById('bulkQuantity').focus();
             return false;
         }
-        
+
         if (isNaN(bulkPrice) || bulkPrice <= 0) {
             showToast('請輸入有效的Y（價格，大於0）', 'error');
             document.getElementById('bulkPrice').focus();
@@ -539,16 +708,15 @@ function validateProductForm(name, price, quantity, promotion, bulkQuantity, bul
             document.getElementById('productPrice').focus();
             return false;
         }
-    }
-    
-    return true;
-}
 
-/**
- * Generate unique ID
- */
-function generateId() {
-    return `product_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        if (promotion === 'custom_subtotal' && (customSubtotal === null || isNaN(customSubtotal) || customSubtotal < 0)) {
+            showToast('請輸入有效的自訂小計', 'error');
+            document.getElementById('productCustomSubtotal').focus();
+            return false;
+        }
+    }
+
+    return true;
 }
 
 // ===== UI Rendering Functions =====
@@ -558,7 +726,7 @@ function generateId() {
  */
 function renderShoppingList() {
     const products = productManager.getAllProducts();
-    
+
     // Update empty state
     if (products.length === 0) {
         emptyState.style.display = 'block';
@@ -567,20 +735,20 @@ function renderShoppingList() {
         emptyState.style.display = 'none';
         clearAllBtn.style.display = 'inline-block';
     }
-    
+
     // Clear existing products (except empty state)
     const existingProducts = shoppingList.querySelectorAll('.product-item');
     existingProducts.forEach(item => item.remove());
-    
+
     // Render each product
     products.forEach(product => {
         const productElement = createProductElement(product);
         shoppingList.appendChild(productElement);
     });
-    
+
     // Update total
     updateTotal();
-    
+
     console.log('✅ 購物清單已更新:', products.length, '項商品');
 }
 
@@ -591,13 +759,12 @@ function createProductElement(product) {
     const div = document.createElement('div');
     div.className = 'product-item';
     div.dataset.productId = product.id;
-    
+
     // Get price info
     const priceInfo = priceCalculator.getPriceInfo(product);
-    
-    // Get photo
-    const photo = storageManager.loadPhoto(product.id);
-    
+
+    const photo = product.photo;
+
     div.innerHTML = `
         <div class="product-header">
             <div class="product-info">
@@ -610,9 +777,9 @@ function createProductElement(product) {
             <div class="detail-item">
                 <span class="detail-label">單價</span>
                 <span class="detail-value">
-                    ${product.promotion === 'bulk_discount' ? 
-                        `${product.bulkQuantity}個${product.bulkPrice}元` : 
-                        `$${product.price}`}
+                    ${product.promotion === 'bulk_discount' ?
+            `${product.bulkQuantity}個${product.bulkPrice}元` :
+            `$${product.price}`}
                 </span>
             </div>
             <div class="detail-item">
@@ -622,9 +789,9 @@ function createProductElement(product) {
             <div class="detail-item">
                 <span class="detail-label">特價</span>
                 <span class="detail-value">
-                    ${product.promotion !== 'none' ? 
-                        `<span class="promotion-badge">${priceInfo.promotionName}</span>` : 
-                        '無'}
+                    ${product.promotion !== 'none' ?
+            `<span class="promotion-badge">${priceInfo.promotionName}</span>` :
+            '無'}
                 </span>
             </div>
             ${priceInfo.savings > 0 ? `
@@ -645,7 +812,7 @@ function createProductElement(product) {
             <button class="btn-delete" data-product-id="${product.id}">🗑️ 刪除</button>
         </div>
     `;
-    
+
     // Add event listeners for photo click
     const photoThumb = div.querySelector('.product-photo-thumbnail');
     if (photoThumb) {
@@ -653,21 +820,21 @@ function createProductElement(product) {
             showPhotoModal(photo);
         });
     }
-    
+
     // Add event listeners for edit/delete buttons
     const editBtn = div.querySelector('.btn-edit');
     const deleteBtn = div.querySelector('.btn-delete');
-    
+
     editBtn.addEventListener('click', () => {
         console.log('✏️ 編輯商品:', product.id);
         showEditProductModal(product.id);
     });
-    
+
     deleteBtn.addEventListener('click', () => {
         console.log('🗑️ 刪除商品:', product.id);
         deleteProduct(product.id);
     });
-    
+
     return div;
 }
 
@@ -698,14 +865,14 @@ function showPhotoModal(photoBase64) {
             </div>
         </div>
     `;
-    
+
     document.body.appendChild(modal);
-    
+
     // Close button
     document.getElementById('closePhotoModal').addEventListener('click', () => {
         document.body.removeChild(modal);
     });
-    
+
     // Click outside to close
     modal.addEventListener('click', (e) => {
         if (e.target === modal) {
@@ -732,44 +899,37 @@ let currentEditingProductId = null;
  */
 function showEditProductModal(productId) {
     const product = productManager.getProductById(productId);
-    
+
     if (!product) {
         console.error('❌ 找不到商品:', productId);
         showToast('找不到商品', 'error');
         return;
     }
-    
+
     currentEditingProductId = productId;
-    
-    // Get photo
-    const photo = storageManager.loadPhoto(productId);
-    
+
+    const photo = product.photo;
+
     // Fill form with current product data
     document.getElementById('editProductName').value = product.name;
     document.getElementById('editProductPrice').value = product.price || '';
     document.getElementById('editProductQuantity').value = product.quantity;
     document.getElementById('editPromotionType').value = product.promotion;
-    document.getElementById('editCustomSubtotal').value = product.customSubtotal || '';
-    
-    // Handle bulk discount fields
-    const editProductPriceGroup = document.getElementById('editProductPriceGroup');
-    const editBulkDiscountGroup = document.getElementById('editBulkDiscountGroup');
-    
+    document.getElementById('editCustomSubtotal').value =
+        product.promotion === 'custom_subtotal' && product.customSubtotal !== null && product.customSubtotal !== undefined
+            ? product.customSubtotal
+            : '';
+
     if (product.promotion === 'bulk_discount') {
-        // Show bulk discount fields, hide price field
-        editProductPriceGroup.style.display = 'none';
-        editBulkDiscountGroup.style.display = 'block';
         document.getElementById('editBulkQuantity').value = product.bulkQuantity || '';
         document.getElementById('editBulkPrice').value = product.bulkPrice || '';
     } else {
-        // Show price field, hide bulk discount fields
-        editProductPriceGroup.style.display = 'block';
-        editBulkDiscountGroup.style.display = 'none';
         document.getElementById('editBulkQuantity').value = '';
         document.getElementById('editBulkPrice').value = '';
     }
+    setEditPromotionFields(product.promotion);
     updateQuantityMultipleFeedback('editProductQuantity', 'editQuantityError', 'editPromotionType', 'editBulkQuantity');
-    
+
     // Show photo
     if (photo) {
         document.getElementById('editPhotoPreview').src = photo;
@@ -777,10 +937,10 @@ function showEditProductModal(productId) {
     } else {
         document.getElementById('editPhotoPreview').style.display = 'none';
     }
-    
+
     // Show modal
     showModal(editProductModal);
-    
+
     console.log('📝 開啟編輯視窗:', product.name);
 }
 
@@ -792,16 +952,18 @@ function saveEditedProduct() {
         console.error('❌ 沒有正在編輯的商品');
         return;
     }
-    
+
     // Get form values
     const name = document.getElementById('editProductName').value.trim();
     const promotion = document.getElementById('editPromotionType').value;
-    const quantity = parseInt(document.getElementById('editProductQuantity').value);
+    const quantity = readPositiveInteger(document.getElementById('editProductQuantity').value);
     const customSubtotalInput = document.getElementById('editCustomSubtotal').value.trim();
-    const customSubtotal = customSubtotalInput ? parseFloat(customSubtotalInput) : null;
-    
+    const customSubtotal = promotion === 'custom_subtotal' && customSubtotalInput !== ''
+        ? parseFloat(customSubtotalInput)
+        : null;
+
     let price, bulkQuantity, bulkPrice;
-    
+
     if (promotion === 'bulk_discount') {
         // Get bulk discount values
         bulkQuantity = parseInt(document.getElementById('editBulkQuantity').value);
@@ -813,12 +975,12 @@ function saveEditedProduct() {
         bulkQuantity = null;
         bulkPrice = null;
     }
-    
+
     // Validate form
     if (!validateEditForm(name, price, quantity, customSubtotal, promotion, bulkQuantity, bulkPrice)) {
         return;
     }
-    
+
     // Update product
     const success = productManager.updateProduct(currentEditingProductId, {
         name: name,
@@ -829,18 +991,15 @@ function saveEditedProduct() {
         bulkPrice: bulkPrice,
         customSubtotal: customSubtotal
     });
-    
+
     if (success) {
-        // Save to localStorage
-        storageManager.saveProducts(productManager.getAllProducts());
-        
         // Update UI
         renderShoppingList();
-        
+
         // Hide modal
         hideModal(editProductModal);
         currentEditingProductId = null;
-        
+
         // Show success message
         showToast('商品已更新', 'success');
         console.log('✅ 商品已更新');
@@ -859,14 +1018,14 @@ function validateEditForm(name, price, quantity, customSubtotal, promotion, bulk
         document.getElementById('editProductName').focus();
         return false;
     }
-    
+
     // Validate quantity
     if (isNaN(quantity) || quantity <= 0 || !Number.isInteger(quantity)) {
         showToast('請輸入有效的數量（正整數）', 'error');
         document.getElementById('editProductQuantity').focus();
         return false;
     }
-    
+
     if (promotion === 'bulk_discount') {
         // Validate bulk discount fields
         if (isNaN(bulkQuantity) || bulkQuantity <= 0 || !Number.isInteger(bulkQuantity)) {
@@ -874,7 +1033,7 @@ function validateEditForm(name, price, quantity, customSubtotal, promotion, bulk
             document.getElementById('editBulkQuantity').focus();
             return false;
         }
-        
+
         if (isNaN(bulkPrice) || bulkPrice <= 0) {
             showToast('請輸入有效的Y（價格，大於0）', 'error');
             document.getElementById('editBulkPrice').focus();
@@ -897,14 +1056,19 @@ function validateEditForm(name, price, quantity, customSubtotal, promotion, bulk
             return false;
         }
     }
-    
+
     // Validate custom subtotal if provided
+    if (promotion === 'custom_subtotal' && customSubtotal === null) {
+        showToast('請輸入有效的自訂小計', 'error');
+        document.getElementById('editCustomSubtotal').focus();
+        return false;
+    }
     if (customSubtotal !== null && (isNaN(customSubtotal) || customSubtotal < 0)) {
         showToast('自訂小計必須為非負數', 'error');
         document.getElementById('editCustomSubtotal').focus();
         return false;
     }
-    
+
     return true;
 }
 
@@ -915,34 +1079,28 @@ function validateEditForm(name, price, quantity, customSubtotal, promotion, bulk
  */
 function deleteProduct(productId) {
     const product = productManager.getProductById(productId);
-    
+
     if (!product) {
         console.error('❌ 找不到商品:', productId);
         showToast('找不到商品', 'error');
         return;
     }
-    
+
     // Confirm deletion
     if (!confirm(`確定要刪除「${product.name}」嗎？`)) {
         console.log('❌ 取消刪除');
         return;
     }
-    
+
     console.log('🗑️ 刪除商品:', product.name);
-    
+
     // Delete from product manager
     const success = productManager.deleteProduct(productId);
-    
+
     if (success) {
-        // Delete photo
-        storageManager.deletePhoto(productId);
-        
-        // Save to localStorage
-        storageManager.saveProducts(productManager.getAllProducts());
-        
         // Update UI
         renderShoppingList();
-        
+
         // Show success message
         showToast(`已刪除「${product.name}」`, 'success');
         console.log('✅ 商品已刪除');
@@ -959,26 +1117,23 @@ function clearShoppingList() {
         showToast('購物清單已經是空的', 'info');
         return;
     }
-    
+
     const count = productManager.getProductCount();
-    
+
     // Confirm clear all
     if (!confirm(`確定要清空購物清單嗎？（${count} 項商品）`)) {
         console.log('❌ 取消清空');
         return;
     }
-    
+
     console.log('🗑️ 清空購物清單');
-    
+
     // Clear all products
     productManager.clearAll();
-    
-    // Clear all data from storage
-    storageManager.clearAll();
-    
+
     // Update UI
     renderShoppingList();
-    
+
     // Show success message
     showToast(`已清空 ${count} 項商品`, 'success');
     console.log('✅ 購物清單已清空');
@@ -1005,9 +1160,25 @@ function hideModal(modalElement) {
 /**
  * Show loading overlay
  */
-function showLoading(text = '處理中...') {
+function showLoading(text = '處理中...', options = {}) {
+    const { cancellable = false, onCancel = null } = options;
     const loadingText = document.getElementById('loadingText');
+    const cancelBtn = document.getElementById('loadingCancelBtn');
+
     loadingText.textContent = text;
+
+    if (cancellable && onCancel) {
+        cancelBtn.hidden = false;
+        cancelBtn.onclick = () => {
+            cancelBtn.disabled = true;
+            onCancel();
+        };
+    } else {
+        cancelBtn.hidden = true;
+        cancelBtn.disabled = false;
+        cancelBtn.onclick = null;
+    }
+
     loadingOverlay.classList.add('show');
 }
 
@@ -1015,7 +1186,11 @@ function showLoading(text = '處理中...') {
  * Hide loading overlay
  */
 function hideLoading() {
+    const cancelBtn = document.getElementById('loadingCancelBtn');
     loadingOverlay.classList.remove('show');
+    cancelBtn.hidden = true;
+    cancelBtn.disabled = false;
+    cancelBtn.onclick = null;
 }
 
 /**
@@ -1024,7 +1199,7 @@ function hideLoading() {
 function showToast(message, type = 'info') {
     toast.textContent = message;
     toast.className = `toast show ${type}`;
-    
+
     setTimeout(() => {
         toast.classList.remove('show');
     }, 3000);
@@ -1034,7 +1209,6 @@ function showToast(message, type = 'info') {
 document.getElementById('closePreviewBtn').addEventListener('click', () => {
     hideModal(photoPreviewModal);
     currentPhoto = null;
-    currentPhotoFile = null;
 });
 
 document.getElementById('closeOcrBtn').addEventListener('click', () => {
@@ -1065,7 +1239,6 @@ document.getElementById('confirmEditBtn').addEventListener('click', () => {
             hideModal(modal);
             if (modal === photoPreviewModal) {
                 currentPhoto = null;
-                currentPhotoFile = null;
             } else if (modal === editProductModal) {
                 currentEditingProductId = null;
             }
@@ -1078,79 +1251,55 @@ document.getElementById('retakeBtn').addEventListener('click', () => {
     console.log('🔄 重新拍照');
     hideModal(photoPreviewModal);
     currentPhoto = null;
-    currentPhotoFile = null;
     // Trigger camera again
-    cameraInput.click();
+    openCamera();
 });
 
 document.getElementById('confirmPhotoBtn').addEventListener('click', async () => {
     console.log('✅ 確認使用照片');
     hideModal(photoPreviewModal);
-    
+
     if (!currentPhoto) {
         showToast('沒有照片可處理', 'error');
         return;
     }
-    
-    // Show loading
-    showLoading('辨識中...');
-    
+
+    showLoading('辨識中...', {
+        cancellable: true,
+        onCancel: () => ocrService.cancel(),
+    });
+
     try {
-        // Compress image for better performance
-        const compressed = await compressImage(currentPhoto);
-        currentPhoto = compressed;
-        
-        // Perform OCR recognition
+        // OCR 使用相機原圖；加入清單時再由 createStoredThumbnail 壓縮
         const ocrResult = await ocrService.recognize(currentPhoto);
-        
+
         // Parse product info from OCR result
         const productInfo = ocrService.parseProductInfo(ocrResult);
-        
+
         hideLoading();
-        
+
         // Show OCR result modal for user confirmation
         showOcrResultModal(productInfo, currentPhoto);
-        
+
     } catch (error) {
         hideLoading();
         console.error('❌ OCR 處理失敗:', error);
-        showToast('文字辨識失敗，請重試或手動輸入', 'error');
-        
-        // Still show modal but with empty fields for manual input
+        if (error && error.code === 'OCR_CANCELLED') {
+            showToast('已取消辨識，請手動填寫商品資訊', 'info');
+            showOcrResultModal({ name: '', price: null, confidence: 0 }, currentPhoto);
+            return;
+        }
+        if (error && error.code === 'OCR_TIMEOUT') {
+            showToast('辨識失敗', 'error');
+        } else {
+            showToast('文字辨識失敗，請重試或手動輸入', 'error');
+        }
+
         showOcrResultModal({ name: '', price: null, confidence: 0 }, currentPhoto);
     }
 });
 
-// ===== Initialize App =====
-console.log('✅ App 初始化完成');
-console.log('📱 相機功能已就緒');
-console.log('🔍 OCR 辨識引擎已載入');
-console.log('📝 辨識結果確認介面已就緒');
-console.log('🛍️ 商品管理模組已載入');
-console.log('� 特價計算模組已載入');
-console.log('�💡 點擊「拍照掃描商品」按鈕開始使用');
-
-// Test price calculator (optional debug)
-// priceCalculator.debugTest();
-
-
-// ===== Initialize App =====
-// Load saved data
-const savedProducts = storageManager.loadProducts();
-if (savedProducts && savedProducts.length > 0) {
-    productManager.importData({ products: savedProducts });
-    console.log('📂 已載入', savedProducts.length, '項商品');
-    
-    // Render initial shopping list
-    renderShoppingList();
-}
-
-console.log('✅ App 初始化完成');
-console.log('📱 相機功能已就緒');
-console.log('🔍 OCR 辨識引擎已載入');
-console.log('📝 辨識結果確認介面已就緒');
-console.log('🛍️ 商品管理模組已載入');
-console.log('💰 特價計算模組已載入');
-console.log('💾 資料儲存模組已載入');
-console.log('🎨 UI 渲染功能已就緒');
-console.log('💡 點擊「拍照掃描商品」按鈕開始使用');
+// 啟動時預熱 OCR Worker，避免首次拍照才載入語料
+ocrService.initialize().catch((err) => {
+    console.warn('OCR 預熱失敗（首次辨識時會再試）:', err);
+});
