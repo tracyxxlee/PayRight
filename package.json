@@ -16,8 +16,6 @@
     "@capacitor/core": "^7.4.3"
   },
   "dependencies": {
-    "@capacitor/camera": "^7.0.5",
-    "@tesseract.js-data/chi_tra": "^1.0.0",
-    "tesseract.js": "^5.1.1"
+    "@capacitor/camera": "^7.0.5"
   }
 }

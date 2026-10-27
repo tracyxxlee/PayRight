@@ -46,7 +46,6 @@ Clone 後應能還原 App 邏輯、建置腳本與 Android 原生專案骨架（
 |------|------|
 | `index.html`、`styles.css` | 主頁與樣式 |
 | `app.js` | 主應用邏輯 |
-| `ocr-service.js` | OCR 辨識 |
 | `product-manager.js` | 商品管理 |
 | `price-calculator.js` | 特價計算 |
 | `capacitor.config.json` | Capacitor 設定（`webDir` 為 `www`） |
@@ -58,7 +57,7 @@ Clone 後應能還原 App 邏輯、建置腳本與 Android 原生專案骨架（
 
 | 路徑 | 說明 |
 |------|------|
-| `copy-web.mjs` | 組裝 `www/` 與根目錄 `vendor/tesseract/`（OCR 離線資源） |
+| `copy-web.mjs` | 將網頁檔複製到 `www/`（Capacitor 打包用） |
 | `dev-server.mjs` | 本機開發用 HTTP 伺服器 |
 | `verify-promotions.mjs` | 特價邏輯驗證（開發用） |
 
@@ -84,7 +83,6 @@ Clone 後應能還原 App 邏輯、建置腳本與 Android 原生專案骨架（
 |------|------------------|
 | `node_modules/` | `npm install` |
 | `www/` | `npm run copy:web`（Capacitor 打包用的 web 根目錄） |
-| `vendor/` | `copy-web.mjs` 從 `node_modules` 複製 Tesseract 檔案；內容會再複製到 `www/vendor/` |
 | `android/.gradle/`、`android/build/`、`android/app/build/` | Gradle 建置與快取 |
 | `android/local.properties` | Android Studio 寫入的 SDK 路徑（每台機器不同） |
 | `android/.idea/`、`android/captures/` | IDE 設定與除錯擷圖 |
@@ -114,7 +112,7 @@ APK 不是版控內的固定資料夾，而是 **在本機對 `android/` 執行 
 
 | 階段 | 路徑 / 指令 |
 |------|-------------|
-| 網頁 staging | `www/`（含 `vendor/tesseract`） |
+| 網頁 staging | `www/` |
 | 同步進原生專案 | `npm run cap:sync` → `android/app/src/main/assets/public` |
 | 建置工具 | JDK 17 或 21、Android SDK（見 `android/local.properties`） |
 | Debug APK | `npm run android:debug` → `android/app/build/outputs/apk/debug/app-debug.apk` |
@@ -156,11 +154,11 @@ npm run android:debug
 | 分類 | 典型路徑 |
 |------|----------|
 | **Git** | 根目錄網頁與 JS、`scripts/`、`package*.json`、`capacitor.config.json`、`README.md`、`.gitignore`、`android/` 原始檔（非 build / sync 產物） |
-| **本機可重建** | `node_modules/`、`www/`、`vendor/`、`android/**/build/`、`android/.gradle/`、Capacitor sync 產物、IDE 設定 |
+| **本機可重建** | `node_modules/`、`www/`、`android/**/build/`、`android/.gradle/`、Capacitor sync 產物、IDE 設定 |
 | **APK 流程** | 輸入：`www` + sync；建置：`android/` + Gradle；輸出：`android/app/build/outputs/apk/` |
 
 ## 相關文件
 
 - [README.md](../README.md) — 功能說明、Android 環境、Debug / Release 打包步驟
 - [capacitor.config.json](../capacitor.config.json) — `webDir: www` 等設定
-- [scripts/copy-web.mjs](../scripts/copy-web.mjs) — 複製到 `www/` 的檔案清單與 OCR 資源組裝
+- [scripts/copy-web.mjs](../scripts/copy-web.mjs) — 複製到 `www/` 的檔案清單

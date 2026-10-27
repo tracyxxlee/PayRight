@@ -33,6 +33,7 @@ class ProductManager {
             bulkQuantity: product.bulkQuantity,
             bulkPrice: product.bulkPrice,
             customSubtotal: product.customSubtotal,
+            subtotal: product.subtotal,
             photo: product.photo,
             timestamp: Date.now(),
             serial,

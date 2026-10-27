@@ -177,15 +177,54 @@ body {
     font-size: var(--font-size-md);
 }
 
-/* Product Item */
+/* Product Item - Swipe to delete */
+.product-swipe-container {
+    position: relative;
+    margin-bottom: var(--spacing-md);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    animation: slideIn 0.3s ease-out;
+}
+
+.product-swipe-container.deleting {
+    transition: max-height 0.25s ease-out, margin 0.25s ease-out, opacity 0.25s ease-out;
+    opacity: 0;
+}
+
+.product-swipe-bg {
+    position: absolute;
+    inset: 0;
+    background-color: var(--danger-color);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 var(--spacing-md);
+    pointer-events: none;
+}
+
+.product-swipe-bg::before,
+.product-swipe-bg::after {
+    content: '🗑️ 刪除';
+    color: white;
+    font-weight: 600;
+    font-size: var(--font-size-md);
+}
+
 .product-item {
+    position: relative;
+    z-index: 1;
     background-color: var(--bg-primary);
     border: 1px solid var(--border-color);
-    border-radius: var(--radius-lg);
-    padding: var(--spacing-md);
-    margin-bottom: var(--spacing-md);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-sm) var(--spacing-md);
     box-shadow: var(--shadow);
-    animation: slideIn 0.3s ease-out;
+    touch-action: pan-y;
+    will-change: transform;
+    cursor: pointer;
+}
+
+.product-swipe-container.swiping .product-item {
+    box-shadow: var(--shadow-lg);
 }
 
 @keyframes slideIn {
@@ -200,122 +239,100 @@ body {
     }
 }
 
-.product-header {
+.product-row {
+    --product-photo-width: 44px;
+    --product-row-gap: var(--spacing-sm);
+    /* 剩餘寬度 = 列寬 - 照片寬；品名／小計各最多佔一半 */
+    --product-half-remain: calc((100% - var(--product-photo-width)) / 2);
+
     display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: var(--spacing-sm);
+    align-items: center;
+    gap: var(--product-row-gap);
+    height: var(--product-photo-width);
+    overflow: hidden;
 }
 
-.product-info {
-    flex: 1;
-}
-
-.product-name {
-    font-size: var(--font-size-md);
-    font-weight: 600;
-    color: var(--text-primary);
-    margin-bottom: var(--spacing-xs);
+.product-photo-thumbnail,
+.product-photo-placeholder {
+    flex: 0 0 var(--product-photo-width);
+    width: var(--product-photo-width);
+    height: var(--product-photo-width);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-color);
 }
 
 .product-photo-thumbnail {
-    width: 60px;
-    height: 60px;
     object-fit: cover;
-    border-radius: var(--radius-md);
-    cursor: pointer;
-    border: 2px solid var(--border-color);
-    transition: transform 0.2s;
+    pointer-events: none;
 }
 
-.product-photo-thumbnail:active {
-    transform: scale(0.95);
+.product-photo-placeholder {
+    background-color: var(--bg-secondary);
 }
 
-.product-details {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: var(--spacing-sm);
-    margin-bottom: var(--spacing-sm);
-    font-size: var(--font-size-sm);
-    color: var(--text-secondary);
-}
-
-.detail-item {
-    display: flex;
-    flex-direction: column;
-}
-
-.detail-label {
-    font-weight: 500;
-    margin-bottom: 2px;
-}
-
-.detail-value {
-    color: var(--text-primary);
+.product-name {
+    flex: 0 1 auto;
+    max-width: var(--product-half-remain);
+    min-width: 0;
+    font-size: var(--font-size-base);
     font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* 特價、數量：佔品名與小計之間的剩餘空間；空間不足則裁切不顯示 */
+.product-meta {
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--product-row-gap);
+    overflow: hidden;
+}
+
+.product-quantity {
+    flex: 0 0 auto;
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.product-promotion {
+    flex: 0 0 auto;
+    font-size: var(--font-size-sm);
+}
+
+.product-promotion:empty {
+    display: none;
 }
 
 .promotion-badge {
     display: inline-block;
-    padding: 2px 8px;
+    padding: 2px 6px;
     background-color: var(--warning-color);
     color: white;
     border-radius: var(--radius-sm);
     font-size: var(--font-size-sm);
     font-weight: 500;
+    white-space: nowrap;
+    vertical-align: middle;
 }
 
-.product-subtotal {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding-top: var(--spacing-sm);
-    border-top: 1px solid var(--border-color);
-    margin-bottom: var(--spacing-sm);
-}
-
-.subtotal-label {
+.product-subtotal-value {
+    flex: 0 1 auto;
+    max-width: var(--product-half-remain);
+    min-width: 0;
+    text-align: right;
     font-size: var(--font-size-md);
-    color: var(--text-secondary);
-}
-
-.subtotal-value {
-    font-size: var(--font-size-lg);
     font-weight: 700;
     color: var(--primary-color);
-}
-
-.product-actions {
-    display: flex;
-    gap: var(--spacing-sm);
-}
-
-.btn-edit,
-.btn-delete {
-    flex: 1;
-    height: 40px;
-    border: none;
-    border-radius: var(--radius-md);
-    font-size: var(--font-size-base);
-    font-weight: 500;
-    cursor: pointer;
-    transition: opacity 0.2s;
-}
-
-.btn-edit {
-    background-color: var(--secondary-color);
-    color: white;
-}
-
-.btn-delete {
-    background-color: var(--danger-color);
-    color: white;
-}
-
-.btn-edit:active,
-.btn-delete:active {
-    opacity: 0.8;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 /* ===== Total Section ===== */
@@ -435,19 +452,11 @@ body {
     padding: var(--spacing-md);
 }
 
-/* Preview Image in Modals */
-#previewImage {
-    width: 100%;
-    height: auto;
-    border-radius: var(--radius-md);
+.product-photo-preview {
     margin-bottom: var(--spacing-md);
 }
 
-.ocr-photo-preview {
-    margin-bottom: var(--spacing-md);
-}
-
-.ocr-photo-preview img,
+.product-photo-preview img,
 #editPhotoPreview {
     width: 100%;
     max-height: 200px;
@@ -456,12 +465,57 @@ body {
     border: 1px solid var(--border-color);
 }
 
-.preview-actions {
+#editPhotoPreview {
+    cursor: pointer;
+}
+
+#fullImageModal {
+    z-index: 1100;
+}
+
+.full-image-content {
+    position: relative;
+    width: 100%;
+    max-width: 100%;
+    max-height: 90vh;
     display: flex;
-    gap: var(--spacing-md);
+    align-items: center;
+    justify-content: center;
+    padding: var(--spacing-lg);
+}
+
+.full-image-close {
+    position: absolute;
+    top: var(--spacing-sm);
+    right: var(--spacing-sm);
+    z-index: 1;
+    color: #fff;
+    background: rgba(0, 0, 0, 0.45);
+    border-radius: 50%;
+}
+
+#fullImageView {
+    max-width: 100%;
+    max-height: 85vh;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    border-radius: var(--radius-md);
 }
 
 /* ===== Form Styles ===== */
+.form-row-2col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--spacing-md);
+    margin-bottom: var(--spacing-md);
+}
+
+.form-row-2col > .form-group {
+    margin-bottom: 0;
+    min-width: 0;
+}
+
 .form-group {
     margin-bottom: var(--spacing-md);
 }
@@ -507,6 +561,12 @@ body {
     color: var(--danger-color);
 }
 
+.form-actions-error {
+    margin-top: var(--spacing-md);
+    margin-bottom: 0;
+    text-align: center;
+}
+
 .form-actions {
     display: flex;
     gap: var(--spacing-md);
@@ -536,61 +596,14 @@ body {
     color: white;
 }
 
+.btn-primary:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
 .btn-primary:active,
 .btn-secondary:active {
     opacity: 0.8;
-}
-
-/* ===== Loading Overlay ===== */
-.loading-overlay {
-    display: none;
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-color: var(--bg-overlay);
-    z-index: 2000;
-    align-items: center;
-    justify-content: center;
-    flex-direction: column;
-}
-
-.loading-overlay.show {
-    display: flex;
-}
-
-.loading-spinner {
-    width: 50px;
-    height: 50px;
-    border: 4px solid rgba(255, 255, 255, 0.3);
-    border-top-color: white;
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin {
-    to {
-        transform: rotate(360deg);
-    }
-}
-
-.loading-overlay p {
-    margin-top: var(--spacing-md);
-    color: white;
-    font-size: var(--font-size-md);
-    font-weight: 600;
-}
-
-.loading-cancel-btn {
-    flex: none;
-    align-self: center;
-    width: auto;
-    min-width: 160px;
-    max-width: min(280px, 88vw);
-    margin-top: var(--spacing-lg);
-    padding: 0 var(--spacing-lg);
-    box-sizing: border-box;
 }
 
 /* ===== Toast Notification ===== */

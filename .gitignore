@@ -1,6 +1,5 @@
 node_modules/
 www/
-vendor/
 android/app/build/
 android/build/
 android/.gradle/
