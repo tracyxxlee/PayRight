@@ -8,5 +8,11 @@
   "server": {
     "androidScheme": "https",
     "hostname": "localhost"
+  },
+  "plugins": {
+    "StatusBar": {
+      "style": "LIGHT",
+      "backgroundColor": "#FFFFFF"
+    }
   }
 }

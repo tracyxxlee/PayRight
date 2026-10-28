@@ -13,46 +13,36 @@
 
 <body>
     <div class="app-container">
-        <!-- Header -->
-        <header class="app-header">
-            <h1>🛒 別多付-購物金額統計</h1>
-        </header>
-
         <!-- Main Content -->
         <main class="main-content">
-            <!-- Camera Button -->
-            <div class="camera-section">
-                <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display: none;">
-                <button id="cameraBtn" class="btn-camera">
-                    📷 拍照商品標籤
-                </button>
-            </div>
+            <!-- Total Section（置頂，避開狀態列） -->
+            <section id="totalSection" class="total-section" style="display: none;">
+                <div class="total-wrapper">
+                    <span class="total-label">總金額</span>
+                    <span id="totalAmount" class="total-amount">$0</span>
+                </div>
+            </section>
 
             <!-- Shopping List -->
-            <section class="shopping-list-section">
+            <section id="shoppingListSection" class="shopping-list-section" style="display: none;">
                 <div class="section-header">
                     <h2>購物清單</h2>
                     <button id="clearAllBtn" class="btn-clear-all">清空清單</button>
                 </div>
 
                 <div id="shoppingList" class="shopping-list">
-                    <!-- Empty state -->
-                    <div id="emptyState" class="empty-state">
-                        <p>🛍️</p>
-                        <p>尚無商品，請開始拍照</p>
-                    </div>
-
                     <!-- Products will be dynamically added here -->
                 </div>
             </section>
 
-            <!-- Total Section -->
-            <section class="total-section">
-                <div class="total-wrapper">
-                    <span class="total-label">總金額</span>
-                    <span id="totalAmount" class="total-amount">$0</span>
-                </div>
-            </section>
+            <!-- Camera Button（底部正中央） -->
+            <div class="camera-section">
+                <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display: none;">
+                <button id="cameraBtn" class="btn-camera">
+                    <span class="btn-camera-icon" aria-hidden="true">📷</span>
+                    <span>新增商品</span>
+                </button>
+            </div>
         </main>
 
         <!-- Product Edit Modal（新增／編輯共用） -->
@@ -70,6 +60,7 @@
                     <div class="form-group">
                         <label for="editProductName">品名</label>
                         <input type="text" id="editProductName" class="form-input" placeholder="請輸入商品名稱" required>
+                        <div class="validation-error" id="editNameError"></div>
                     </div>
 
                     <div class="form-group">
@@ -88,18 +79,29 @@
                         <label for="editCustomSubtotal">自訂小計 (元)</label>
                         <input type="number" id="editCustomSubtotal" class="form-input" placeholder="請輸入自訂小計金額" step="1"
                             min="1" inputmode="numeric">
+                        <div class="validation-error" id="editCustomSubtotalError"></div>
                         <small class="form-hint">適用於非內建特價規則，如買三送一</small>
                     </div>
 
                     <div class="form-group" id="editBulkDiscountGroup" style="display: none;">
                         <label>X個Y元設定</label>
-                        <div style="display: flex; gap: 10px; align-items: center;">
-                            <input type="number" id="editBulkQuantity" class="form-input" placeholder="X (數量)" min="1"
-                                step="1" inputmode="numeric" style="flex: 1;">
-                            <span>個</span>
-                            <input type="number" id="editBulkPrice" class="form-input" placeholder="Y (價格)" min="1"
-                                step="1" inputmode="numeric" style="flex: 1;">
-                            <span>元</span>
+                        <div class="bulk-discount-row">
+                            <div class="bulk-discount-field">
+                                <div class="bulk-discount-input-wrap">
+                                    <input type="number" id="editBulkQuantity" class="form-input" placeholder="X (數量)" min="1"
+                                        step="1" inputmode="numeric">
+                                    <span>個</span>
+                                </div>
+                                <div class="validation-error" id="editBulkQuantityError"></div>
+                            </div>
+                            <div class="bulk-discount-field">
+                                <div class="bulk-discount-input-wrap">
+                                    <input type="number" id="editBulkPrice" class="form-input" placeholder="Y (價格)" min="1"
+                                        step="1" inputmode="numeric">
+                                    <span>元</span>
+                                </div>
+                                <div class="validation-error" id="editBulkPriceError"></div>
+                            </div>
                         </div>
                         <small class="form-hint">例如: 3個100元</small>
                     </div>
@@ -115,6 +117,7 @@
                             <label for="editProductPrice">單價 (元)</label>
                             <input type="number" id="editProductPrice" class="form-input" placeholder="請輸入價格" step="1"
                                 min="1" inputmode="numeric" required>
+                            <div class="validation-error" id="editPriceError"></div>
                         </div>
                     </div>
 

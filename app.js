@@ -8,11 +8,33 @@ console.log('🛒 別多付 App 已啟動');
 console.log('版本: 1.0.0');
 console.log('開發階段: ✅ 所有功能開發完成！');
 
+// ===== Status Bar（白底用 LIGHT = 深色圖示） =====
+function isNativeApp() {
+    return Boolean(window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform());
+}
+
+async function configureStatusBar() {
+    if (!isNativeApp()) {
+        return;
+    }
+
+    try {
+        // LIGHT = 深色文字／圖示，適合淺色背景；DARK = 淺色圖示，適合深色背景
+        await window.Capacitor.nativePromise('StatusBar', 'setStyle', { style: 'LIGHT' });
+        await window.Capacitor.nativePromise('StatusBar', 'setBackgroundColor', { color: '#FFFFFF' });
+    } catch (error) {
+        console.warn('狀態列設定略過:', error);
+    }
+}
+
+configureStatusBar();
+
 // ===== DOM Elements =====
 const cameraBtn = document.getElementById('cameraBtn');
 const cameraInput = document.getElementById('cameraInput');
 const shoppingList = document.getElementById('shoppingList');
-const emptyState = document.getElementById('emptyState');
+const shoppingListSection = document.getElementById('shoppingListSection');
+const totalSection = document.getElementById('totalSection');
 const totalAmount = document.getElementById('totalAmount');
 const clearAllBtn = document.getElementById('clearAllBtn');
 
@@ -73,7 +95,9 @@ clearAllBtn.addEventListener('click', () => {
 // Real-time form validation for Edit modal
 document.getElementById('editProductName').addEventListener('input', (e) => {
     const input = e.target;
-    if (input.value.trim().length > 0) {
+    clearFieldError('editNameError', 'editProductName');
+    if (input.value.trim().length === 0) {
+        // 空值時不標紅，等送出再顯示錯誤
         input.style.borderColor = '';
     }
 });
@@ -85,9 +109,10 @@ document.getElementById('editProductName').addEventListener('input', (e) => {
 document.getElementById('editProductPrice').addEventListener('input', (e) => {
     const input = e.target;
     sanitizePositiveIntegerField(input);
+    clearFieldError('editPriceError', 'editProductPrice');
     if (readPositiveInteger(input.value)) {
         input.style.borderColor = '';
-    } else {
+    } else if (input.value.trim()) {
         input.style.borderColor = 'var(--danger-color)';
     }
 });
@@ -98,8 +123,10 @@ document.getElementById('editProductQuantity').addEventListener('input', (e) => 
     sanitizePositiveIntegerField(input);
     if (readPositiveInteger(input.value)) {
         input.style.borderColor = '';
-    } else {
+    } else if (input.value.trim()) {
         input.style.borderColor = 'var(--danger-color)';
+    } else {
+        input.style.borderColor = '';
     }
     updateQuantityMultipleFeedback('editProductQuantity', 'editQuantityError', 'editPromotionType', 'editBulkQuantity');
 });
@@ -107,8 +134,9 @@ document.getElementById('editProductQuantity').addEventListener('input', (e) => 
 document.getElementById('editCustomSubtotal').addEventListener('input', (e) => {
     const input = e.target;
     sanitizePositiveIntegerField(input);
+    clearFieldError('editCustomSubtotalError', 'editCustomSubtotal');
     if (!input.value.trim()) {
-        input.style.borderColor = ''; // Empty is valid
+        input.style.borderColor = ''; // Empty is valid until submit
         return;
     }
     if (readPositiveInteger(input.value)) {
@@ -122,9 +150,10 @@ document.getElementById('editCustomSubtotal').addEventListener('input', (e) => {
 document.getElementById('editBulkQuantity').addEventListener('input', (e) => {
     const input = e.target;
     sanitizePositiveIntegerField(input);
+    clearFieldError('editBulkQuantityError', 'editBulkQuantity');
     if (readPositiveInteger(input.value)) {
         input.style.borderColor = '';
-    } else {
+    } else if (input.value.trim()) {
         input.style.borderColor = 'var(--danger-color)';
     }
     updateQuantityMultipleFeedback('editProductQuantity', 'editQuantityError', 'editPromotionType', 'editBulkQuantity');
@@ -133,9 +162,10 @@ document.getElementById('editBulkQuantity').addEventListener('input', (e) => {
 document.getElementById('editBulkPrice').addEventListener('input', (e) => {
     const input = e.target;
     sanitizePositiveIntegerField(input);
+    clearFieldError('editBulkPriceError', 'editBulkPrice');
     if (readPositiveInteger(input.value)) {
         input.style.borderColor = '';
-    } else {
+    } else if (input.value.trim()) {
         input.style.borderColor = 'var(--danger-color)';
     }
 });
@@ -167,7 +197,14 @@ document.getElementById('editPromotionType').addEventListener('change', (e) => {
     if (promotionType !== 'custom_subtotal') {
         document.getElementById('editCustomSubtotal').value = '';
     }
+    clearEditFormFieldErrors();
+    clearEditAmountError();
     updateQuantityMultipleFeedback('editProductQuantity', 'editQuantityError', 'editPromotionType', 'editBulkQuantity');
+
+    // 選完特價後，focus 跳到下一個畫面上可見的欄位（等欄位顯示切換完成）
+    requestAnimationFrame(() => {
+        focusNextVisibleEditField('editPromotionType');
+    });
 });
 
 // Enter key support for Edit modal bulk discount fields
@@ -184,10 +221,6 @@ document.getElementById('editPromotionType').addEventListener('change', (e) => {
 });
 
 // ===== Camera & Photo Functions =====
-
-function isNativeApp() {
-    return Boolean(window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform());
-}
 
 /**
  * Android WebView ignores capture="environment" and opens the gallery.
@@ -360,11 +393,22 @@ function validateBulkQuantity(quantity, bulkQuantity) {
     return null;
 }
 
-function showQuantityError(errorElementId, inputElement, message) {
+function showFieldError(errorElementId, inputElement, message) {
     const errorEl = document.getElementById(errorElementId);
     errorEl.textContent = message;
     errorEl.style.display = 'block';
     inputElement.style.borderColor = 'var(--danger-color)';
+}
+
+function clearFieldError(errorElementId, inputElementId) {
+    const errorEl = document.getElementById(errorElementId);
+    errorEl.textContent = '';
+    errorEl.style.display = 'none';
+    document.getElementById(inputElementId).style.borderColor = '';
+}
+
+function showQuantityError(errorElementId, inputElement, message) {
+    showFieldError(errorElementId, inputElement, message);
 }
 
 function clearQuantityError(errorElementId, inputElementId) {
@@ -376,6 +420,15 @@ function clearQuantityError(errorElementId, inputElementId) {
     if (value) {
         inputElement.style.borderColor = '';
     }
+}
+
+function clearEditFormFieldErrors() {
+    clearFieldError('editNameError', 'editProductName');
+    clearFieldError('editPriceError', 'editProductPrice');
+    clearFieldError('editCustomSubtotalError', 'editCustomSubtotal');
+    clearFieldError('editBulkQuantityError', 'editBulkQuantity');
+    clearFieldError('editBulkPriceError', 'editBulkPrice');
+    clearQuantityError('editQuantityError', 'editProductQuantity');
 }
 
 function updateQuantityMultipleFeedback(quantityInputId, errorId, promotionSelectId, bulkQuantityInputId) {
@@ -404,6 +457,45 @@ function setEditPromotionFields(promotionType) {
     document.getElementById('editCustomSubtotalGroup').style.display = isCustom ? 'block' : 'none';
 }
 
+/**
+ * 判斷編輯表單欄位是否目前可見（祖先沒有 display:none）
+ */
+function isEditFieldVisible(el) {
+    if (!el || !(el instanceof HTMLElement)) {
+        return false;
+    }
+    let node = el;
+    while (node && node !== editProductModal) {
+        if (window.getComputedStyle(node).display === 'none') {
+            return false;
+        }
+        node = node.parentElement;
+    }
+    return true;
+}
+
+/**
+ * 將 focus 移到指定欄位之後、下一個畫面上可見的輸入欄位
+ */
+function focusNextVisibleEditField(afterElementId) {
+    const modalBody = editProductModal.querySelector('.modal-body');
+    if (!modalBody) {
+        return;
+    }
+    const fields = Array.from(modalBody.querySelectorAll('input.form-input, select.form-select'));
+    const startIndex = fields.findIndex(el => el.id === afterElementId);
+    if (startIndex === -1) {
+        return;
+    }
+    for (let i = startIndex + 1; i < fields.length; i++) {
+        const field = fields[i];
+        if (isEditFieldVisible(field)) {
+            field.focus();
+            return;
+        }
+    }
+}
+
 // ===== UI Rendering Functions =====
 
 /**
@@ -412,16 +504,13 @@ function setEditPromotionFields(promotionType) {
 function renderShoppingList() {
     const products = productManager.getAllProducts();
 
-    // Update empty state
-    if (products.length === 0) {
-        emptyState.style.display = 'block';
-        clearAllBtn.style.display = 'none';
-    } else {
-        emptyState.style.display = 'none';
-        clearAllBtn.style.display = 'inline-block';
-    }
+    // 空清單：只顯示「新增商品」；有商品才顯示清單與總金額
+    const hasProducts = products.length > 0;
+    shoppingListSection.style.display = hasProducts ? 'flex' : 'none';
+    totalSection.style.display = hasProducts ? 'block' : 'none';
+    document.querySelector('.main-content')?.classList.toggle('has-products', hasProducts);
 
-    // Clear existing products (except empty state)
+    // Clear existing products
     const existingProducts = shoppingList.querySelectorAll('.product-swipe-container');
     existingProducts.forEach(item => item.remove());
 
@@ -681,7 +770,7 @@ function resetEditProductForm() {
     document.getElementById('editBulkQuantity').value = '';
     document.getElementById('editBulkPrice').value = '';
     setEditPromotionFields('none');
-    clearQuantityError('editQuantityError', 'editProductQuantity');
+    clearEditFormFieldErrors();
     clearEditAmountError();
     setEditSaveButtonEnabled(true);
 }
@@ -757,6 +846,7 @@ function showEditProductModal(productId) {
         document.getElementById('editBulkPrice').value = '';
     }
     setEditPromotionFields(product.promotion);
+    clearEditFormFieldErrors();
     updateQuantityMultipleFeedback('editProductQuantity', 'editQuantityError', 'editPromotionType', 'editBulkQuantity');
     setEditPhotoPreview(product.photo || null);
     clearEditAmountError();
@@ -905,55 +995,63 @@ async function saveEditedProduct() {
 }
 
 /**
- * 驗證編輯表單
+ * 驗證編輯表單（錯誤訊息顯示於對應欄位下方）
  */
 function validateEditForm(name, price, quantity, customSubtotal, promotion, bulkQuantity, bulkPrice) {
+    clearEditFormFieldErrors();
+
     // Validate name
     if (!name || name.length === 0) {
-        showToast('請輸入商品名稱', 'error');
-        document.getElementById('editProductName').focus();
+        const nameInput = document.getElementById('editProductName');
+        showFieldError('editNameError', nameInput, '請輸入商品名稱');
+        nameInput.focus();
         return false;
     }
 
     // Validate quantity
     if (isNaN(quantity) || quantity <= 0 || !Number.isInteger(quantity)) {
-        showToast('請輸入有效的數量（正整數）', 'error');
-        document.getElementById('editProductQuantity').focus();
+        const qtyInput = document.getElementById('editProductQuantity');
+        showFieldError('editQuantityError', qtyInput, '請輸入大於 0 的數值');
+        qtyInput.focus();
         return false;
     }
 
     if (promotion === 'bulk_discount') {
         // Validate bulk discount fields
         if (isNaN(bulkQuantity) || bulkQuantity <= 0 || !Number.isInteger(bulkQuantity)) {
-            showToast('請輸入有效的X（數量，正整數）', 'error');
-            document.getElementById('editBulkQuantity').focus();
+            const bulkQtyInput = document.getElementById('editBulkQuantity');
+            showFieldError('editBulkQuantityError', bulkQtyInput, '請輸入大於 0 的數值');
+            bulkQtyInput.focus();
             return false;
         }
 
         if (isNaN(bulkPrice) || bulkPrice <= 0) {
-            showToast('請輸入有效的Y（價格，大於0）', 'error');
-            document.getElementById('editBulkPrice').focus();
+            const bulkPriceInput = document.getElementById('editBulkPrice');
+            showFieldError('editBulkPriceError', bulkPriceInput, '請輸入大於 0 的數值');
+            bulkPriceInput.focus();
             return false;
         }
 
         const bulkQtyError = validateBulkQuantity(quantity, bulkQuantity);
         if (bulkQtyError) {
             const qtyInput = document.getElementById('editProductQuantity');
-            showQuantityError('editQuantityError', qtyInput, bulkQtyError);
+            showFieldError('editQuantityError', qtyInput, bulkQtyError);
             qtyInput.focus();
             return false;
         }
     } else if (promotion === 'custom_subtotal') {
         if (customSubtotal === null || isNaN(customSubtotal) || customSubtotal < 0) {
-            showToast('請輸入有效的自訂小計', 'error');
-            document.getElementById('editCustomSubtotal').focus();
+            const customInput = document.getElementById('editCustomSubtotal');
+            showFieldError('editCustomSubtotalError', customInput, '請輸入大於 0 的數值');
+            customInput.focus();
             return false;
         }
     } else {
         // Validate price for promotions that use unit price
         if (isNaN(price) || price <= 0) {
-            showToast('請輸入有效的價格', 'error');
-            document.getElementById('editProductPrice').focus();
+            const priceInput = document.getElementById('editProductPrice');
+            showFieldError('editPriceError', priceInput, '請輸入大於 0 的數值');
+            priceInput.focus();
             return false;
         }
     }

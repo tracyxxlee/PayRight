@@ -114,6 +114,8 @@ npm run android:open
 
 拍照：瀏覽器使用頁面上的檔案輸入（`capture="environment"`）；Android App 內則透過 Capacitor Camera 叫起系統相機。
 
+狀態列：Android App 透過 Capacitor Status Bar 設為 `LIGHT`（深色圖示），避免白底上看不見時間與 Wi‑Fi 圖示。
+
 ### 打包 Android APK
 
 以下指令在專案根目錄執行。Windows 請用 PowerShell 或命令提示字元；`gradlew.bat` 是 Android 專案內的 Gradle Wrapper，第一次建置會下載依賴，需要網路。
@@ -202,7 +204,7 @@ $env:BUILD_TOOLS = "$env:ANDROID_HOME\build-tools\34.0.0"
 
 - **前端**：純 HTML5 + CSS3 + Vanilla JavaScript  
 - **圖片處理**：Canvas API（清單縮圖壓縮）  
-- **原生橋接**：Capacitor（Android Camera）  
+- **原生橋接**：Capacitor（Android Camera、Status Bar）  
 
 #### ProductManager
 

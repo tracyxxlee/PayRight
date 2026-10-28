@@ -16,6 +16,7 @@
     "@capacitor/core": "^7.4.3"
   },
   "dependencies": {
-    "@capacitor/camera": "^7.0.5"
+    "@capacitor/camera": "^7.0.5",
+    "@capacitor/status-bar": "^7.0.6"
   }
 }
