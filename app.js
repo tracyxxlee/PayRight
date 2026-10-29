@@ -386,7 +386,7 @@ function readPositiveInteger(raw) {
 /** 清單／提示用顯示名稱；品名空白時顯示佔位文字 */
 function getProductDisplayName(name) {
     const trimmed = typeof name === 'string' ? name.trim() : '';
-    return trimmed || '（未填品名）';
+    return trimmed || '';
 }
 
 /**
