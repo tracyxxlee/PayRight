@@ -58,12 +58,6 @@
                     </div>
 
                     <div class="form-group">
-                        <label for="editProductName">品名</label>
-                        <input type="text" id="editProductName" class="form-input" placeholder="請輸入商品名稱" required>
-                        <div class="validation-error" id="editNameError"></div>
-                    </div>
-
-                    <div class="form-group">
                         <label for="editPromotionType">特價活動</label>
                         <select id="editPromotionType" class="form-select">
                             <option value="none">無特價</option>
@@ -88,16 +82,16 @@
                         <div class="bulk-discount-row">
                             <div class="bulk-discount-field">
                                 <div class="bulk-discount-input-wrap">
-                                    <input type="number" id="editBulkQuantity" class="form-input" placeholder="X (數量)" min="1"
-                                        step="1" inputmode="numeric">
+                                    <input type="number" id="editBulkQuantity" class="form-input" placeholder="X (數量)"
+                                        min="1" step="1" inputmode="numeric">
                                     <span>個</span>
                                 </div>
                                 <div class="validation-error" id="editBulkQuantityError"></div>
                             </div>
                             <div class="bulk-discount-field">
                                 <div class="bulk-discount-input-wrap">
-                                    <input type="number" id="editBulkPrice" class="form-input" placeholder="Y (價格)" min="1"
-                                        step="1" inputmode="numeric">
+                                    <input type="number" id="editBulkPrice" class="form-input" placeholder="Y (價格)"
+                                        min="1" step="1" inputmode="numeric">
                                     <span>元</span>
                                 </div>
                                 <div class="validation-error" id="editBulkPriceError"></div>
@@ -119,6 +113,12 @@
                                 min="1" inputmode="numeric" required>
                             <div class="validation-error" id="editPriceError"></div>
                         </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="editProductName">品名</label>
+                        <input type="text" id="editProductName" class="form-input" placeholder="請輸入商品名稱" required>
+                        <div class="validation-error" id="editNameError"></div>
                     </div>
 
                     <div class="validation-error form-actions-error" id="editAmountError"></div>

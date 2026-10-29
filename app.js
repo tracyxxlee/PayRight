@@ -380,6 +380,12 @@ function readPositiveInteger(raw) {
     return Number(text);
 }
 
+/** 清單／提示用顯示名稱；品名空白時顯示佔位文字 */
+function getProductDisplayName(name) {
+    const trimmed = typeof name === 'string' ? name.trim() : '';
+    return trimmed || '（未填品名）';
+}
+
 /**
  * X個Y元：數量必須是 X 的倍數。不符合時回傳錯誤訊息，符合或尚未可判斷時回傳 null。
  */
@@ -452,7 +458,9 @@ function updateQuantityMultipleFeedback(quantityInputId, errorId, promotionSelec
 function setEditPromotionFields(promotionType) {
     const isBulk = promotionType === 'bulk_discount';
     const isCustom = promotionType === 'custom_subtotal';
-    document.getElementById('editProductPriceGroup').style.display = (isBulk || isCustom) ? 'none' : 'block';
+    const hidePrice = isBulk || isCustom;
+    document.getElementById('editProductPriceGroup').style.display = hidePrice ? 'none' : 'block';
+    document.getElementById('editPriceQuantityRow')?.classList.toggle('price-hidden', hidePrice);
     document.getElementById('editBulkDiscountGroup').style.display = isBulk ? 'block' : 'none';
     document.getElementById('editCustomSubtotalGroup').style.display = isCustom ? 'block' : 'none';
 }
@@ -548,7 +556,7 @@ function createProductElement(product) {
         <div class="product-item" role="button" tabindex="0">
             <div class="product-row">
                 ${photoHtml}
-                <div class="product-name">${escapeHtml(product.name)}</div>
+                <div class="product-name">${escapeHtml(getProductDisplayName(product.name))}</div>
                 <div class="product-meta">
                     <div class="product-promotion">${promotionHtml}</div>
                     <div class="product-quantity">×${product.quantity}</div>
@@ -809,7 +817,7 @@ function showAddProductModal(photoBase64) {
     document.getElementById('confirmEditBtn').textContent = '確認加入';
 
     showModal(editProductModal);
-    document.getElementById('editProductName').focus();
+    document.getElementById('editProductPrice').focus();
     console.log('📝 開啟新增商品視窗');
 }
 
@@ -862,7 +870,9 @@ function showEditProductModal(productId) {
 function readEditFormValues() {
     const name = document.getElementById('editProductName').value.trim();
     const promotion = document.getElementById('editPromotionType').value;
-    const quantity = readPositiveInteger(document.getElementById('editProductQuantity').value);
+    const quantityRaw = document.getElementById('editProductQuantity').value.trim();
+    // 數量空白視為 1，最少只填單價即可完成新增
+    const quantity = quantityRaw === '' ? 1 : readPositiveInteger(quantityRaw);
     const customSubtotalInput = document.getElementById('editCustomSubtotal').value.trim();
     const customSubtotal = promotion === 'custom_subtotal' && customSubtotalInput !== ''
         ? readPositiveInteger(customSubtotalInput)
@@ -909,7 +919,6 @@ async function saveEditedProduct() {
     const values = readEditFormValues();
 
     if (!validateEditForm(
-        values.name,
         values.price,
         values.quantity,
         values.customSubtotal,
@@ -997,18 +1006,10 @@ async function saveEditedProduct() {
 /**
  * 驗證編輯表單（錯誤訊息顯示於對應欄位下方）
  */
-function validateEditForm(name, price, quantity, customSubtotal, promotion, bulkQuantity, bulkPrice) {
+function validateEditForm(price, quantity, customSubtotal, promotion, bulkQuantity, bulkPrice) {
     clearEditFormFieldErrors();
 
-    // Validate name
-    if (!name || name.length === 0) {
-        const nameInput = document.getElementById('editProductName');
-        showFieldError('editNameError', nameInput, '請輸入商品名稱');
-        nameInput.focus();
-        return false;
-    }
-
-    // Validate quantity
+    // 品名選填；數量空白已在 readEditFormValues 視為 1
     if (isNaN(quantity) || quantity <= 0 || !Number.isInteger(quantity)) {
         const qtyInput = document.getElementById('editProductQuantity');
         showFieldError('editQuantityError', qtyInput, '請輸入大於 0 的數值');
@@ -1077,13 +1078,14 @@ function deleteProduct(productId, options = {}) {
 
     // Confirm deletion（滑動刪除可略過確認）
     if (!options.skipConfirm) {
-        if (!confirm(`確定要刪除「${product.name}」嗎？`)) {
+        const displayName = getProductDisplayName(product.name);
+        if (!confirm(`確定要刪除「${displayName}」嗎？`)) {
             console.log('❌ 取消刪除');
             return;
         }
     }
 
-    console.log('🗑️ 刪除商品:', product.name);
+    console.log('🗑️ 刪除商品:', getProductDisplayName(product.name));
 
     // Delete from product manager
     const success = productManager.deleteProduct(productId);
@@ -1093,7 +1095,7 @@ function deleteProduct(productId, options = {}) {
         renderShoppingList();
 
         // Show success message
-        showToast(`已刪除「${product.name}」`, 'success');
+        showToast(`已刪除「${getProductDisplayName(product.name)}」`, 'success');
         console.log('✅ 商品已刪除');
     } else {
         showToast('刪除失敗', 'error');
