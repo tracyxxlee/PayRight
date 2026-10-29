@@ -1,4 +1,4 @@
-package com.pxmart.shopping;
+package com.tracyxxlee.paywright;
 
 import android.graphics.Color;
 import android.os.Bundle;

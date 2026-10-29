@@ -1,4 +1,4 @@
-package com.getcapacitor.myapp;
+package com.tracyxxlee.paywright;
 
 import static org.junit.Assert.*;
 

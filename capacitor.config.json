@@ -1,6 +1,6 @@
 {
-  "appId": "com.pxmart.shopping",
-  "appName": "別多付-購物金額統計幫手",
+  "appId": "com.tracyxxlee.paywright",
+  "appName": "別多付",
   "webDir": "www",
   "android": {
     "allowMixedContent": false

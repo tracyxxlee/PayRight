@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">別多付-購物金額統計幫手</string>
-    <string name="title_activity_main">別多付-購物金額統計幫手</string>
-    <string name="package_name">com.pxmart.shopping</string>
-    <string name="custom_url_scheme">com.pxmart.shopping</string>
+    <string name="app_name">別多付</string>
+    <string name="title_activity_main">別多付</string>
+    <string name="package_name">com.tracyxxlee.paywright</string>
+    <string name="custom_url_scheme">com.tracyxxlee.paywright</string>
 </resources>
