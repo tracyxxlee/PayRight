@@ -151,13 +151,7 @@ body {
     justify-content: center;
     line-height: 1;
     font-size: 1.15em;
-}
-
-/* 針對內部的 Emoji 或直接對按鈕本身進行微調 */
-.btn-camera-icon span {
-    /* 如果 emoji 有被 span 包覆 */
     transform: translateY(-5px);
-    /* 負值往上，正值往下 */
 }
 
 .btn-camera:active {
