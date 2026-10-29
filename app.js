@@ -19,6 +19,9 @@ async function configureStatusBar() {
     }
 
     try {
+        // 永久顯示狀態列；內容不疊在狀態列底下（搭配 Android theme opt-out edge-to-edge）
+        await window.Capacitor.nativePromise('StatusBar', 'show');
+        await window.Capacitor.nativePromise('StatusBar', 'setOverlaysWebView', { overlay: false });
         // LIGHT = 深色文字／圖示，適合淺色背景；DARK = 淺色圖示，適合深色背景
         await window.Capacitor.nativePromise('StatusBar', 'setStyle', { style: 'LIGHT' });
         await window.Capacitor.nativePromise('StatusBar', 'setBackgroundColor', { color: '#FFFFFF' });
