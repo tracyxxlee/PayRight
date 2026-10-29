@@ -114,7 +114,7 @@ npm run android:open
 
 拍照：瀏覽器使用頁面上的檔案輸入（`capture="environment"`）；Android App 內則透過 Capacitor Camera 叫起系統相機。
 
-狀態列：Android App 透過 Capacitor Status Bar 設為 `LIGHT`（深色圖示），避免白底上看不見時間與 Wi‑Fi 圖示。
+狀態列／導覽列：Android App 永久顯示系統狀態列與底部導覽列（不進 immersive 全螢幕）。Status Bar 設為 `LIGHT`（深色圖示）與白底；`overlaysWebView: false`，並在 Android 15 以 `windowOptOutEdgeToEdgeEnforcement` 退出強制 edge-to-edge，避免內容壓在系統列底下。
 
 ### 打包 Android APK
 
