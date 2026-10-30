@@ -10,10 +10,31 @@
 
 ## 怎麼用（30 秒上手）
 
-1. 打開 App → 點「拍照商品標籤」  
-2. 拍下價目／促銷標籤 → 填品名、單價、數量、特價 → 確認加入  
-3. 邊逛邊加；總金額一路更新  
+1. 打開 App → 點「新增商品」
+
+<p align="center">
+  <img src="image/step1-home.png" alt="首頁：點新增商品" width="280">
+</p>
+
+2. 拍下價目／促銷標籤 → 填品名、單價、數量、特價 → 確認加入
+
+<p align="center">
+  <img src="image/price_tag1.jpg" alt="商品標籤：芳香豆" width="280">
+  &nbsp;
+  <img src="image/step2-edit.png" alt="編輯商品：芳香豆、單價 198、數量 2、特價 2個198元" width="280">
+</p>
+
+3. 邊逛邊加；總金額一路更新
+
+<p align="center">
+  <img src="image/step3-list.png" alt="購物清單：油豆腐烏龍麵 ×1 $85、芳香豆 ×2 2個198元 $198，總金額 $283" width="280">
+</p>
+
 4. 到收銀台核對；有爭議就點開該筆照片
+
+<p align="center">
+  <img src="image/step4-photo.png" alt="放大查看芳香豆標籤照片" width="280">
+</p>
 
 ## 四個原則
 
@@ -86,6 +107,7 @@ PayRight/
 ├── package.json            # npm 腳本與 Capacitor 依賴
 ├── scripts/copy-web.mjs    # 將網頁檔複製到 www/
 ├── android/                # Android 原生專案
+├── image/                  # README 操作截圖與標籤範例
 ├── docs/                   # 補充文件（目錄與版控見 project-layout.md）
 └── README.md               # 說明文件
 ```
