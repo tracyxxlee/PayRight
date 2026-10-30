@@ -437,6 +437,37 @@ body {
     animation: slideUp 0.3s ease-out;
 }
 
+/* 編輯 modal：鍵盤 adjustResize 時按鈕釘在可視區底部 */
+#editProductModal.show {
+    align-items: center;
+}
+
+#editProductModal .modal-content {
+    display: flex;
+    flex-direction: column;
+    max-height: 100%;
+    overflow: hidden;
+}
+
+#editProductModal .modal-header {
+    flex-shrink: 0;
+}
+
+#editProductModal .modal-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+#editProductModal .form-actions {
+    flex-shrink: 0;
+    margin-top: 0;
+    padding: var(--spacing-md);
+    border-top: 1px solid var(--border-color);
+    background-color: var(--bg-primary);
+}
+
 @keyframes slideUp {
     from {
         transform: translateY(20px);
